@@ -1,0 +1,30 @@
+name: dawnbox
+description: An alarm clock that unwraps a small surprise every morning.
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  alarm: ^5.15.0
+  android_intent_plus: ^6.1.0
+  audioplayers: ^6.8.1
+  flutter_local_notifications: ^22.3.2
+  flutter_tts: ^4.2.5
+  permission_handler: ^12.0.2
+  shared_preferences: ^2.3.0
+  timezone: ^0.11.0
+  url_launcher: ^6.3.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/
