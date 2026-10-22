@@ -57,7 +57,7 @@ class SettingsStore extends ChangeNotifier {
   }
 
   /// Seconds of ringing before the surprise starts on its own.
-  int get autoSurpriseSeconds => _prefs.getInt(_kAutoSeconds) ?? 60;
+  int get autoSurpriseSeconds => _prefs.getInt(_kAutoSeconds) ?? 40;
 
   /// Seconds of alarm chime before the wake-up song takes over (built into
   /// assets/alarm.wav, so keep the two in sync).
@@ -109,7 +109,7 @@ class SettingsStore extends ChangeNotifier {
 
   AlarmSound get alarmSound {
     final saved = _prefs.getString(_kSound);
-    return AlarmSound.values.firstWhere((s) => s.name == saved, orElse: () => AlarmSound.chime);
+    return AlarmSound.values.firstWhere((s) => s.name == saved, orElse: () => AlarmSound.piano); // default: Soft piano + song
   }
 
   Future<void> setAlarmSound(AlarmSound s) async {

@@ -1,7 +1,7 @@
 import 'dart:async';
 
+import 'package:alarm/alarm.dart';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../alarm_service.dart';
 import '../feedback_service.dart';
@@ -12,6 +12,7 @@ import '../surprise/song_player.dart';
 import '../surprise/speaker.dart';
 import '../surprise/surprise.dart';
 import '../surprise/surprise_engine.dart';
+import '../surprise/waiting_music.dart';
 import '../theme.dart';
 
 const _weekdays = [
@@ -21,8 +22,12 @@ const _weekdaysDe = [
   'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag',
 ];
 
-/// Pause between repeats until I am awake or Play surprise songs is tapped.
-const _repeatPause = Duration(seconds: 20);
+/// Waiting music between repeats until I am awake or Play some songs is tapped.
+const _repeatPause = Duration(seconds: 30);
+
+/// After the surprise was said once plus 4 repeats (5 times) without any
+/// tap, the alarm rings again at full volume.
+const _saysBeforeRingAgain = 5;
 
 class SurpriseScreen extends StatefulWidget {
   const SurpriseScreen({super.key, required this.store, this.fromAlarm = false});
@@ -51,8 +56,30 @@ class _SurpriseScreenState extends State<SurpriseScreen> {
   /// Riddle: answer revealed.
   bool _confirmed = false;
 
-  /// I am awake or Play surprise songs was tapped: stop repeating.
+  /// I am awake or Play some songs was tapped: stop repeating.
   bool _awake = false;
+
+  /// I am awake (or Yes) was tapped. Only then may the screen turn off.
+  bool _confirmedAwake = false;
+
+  /// The "Still sleeping?" check-in, only while songs are playing:
+  /// - song surprise, Play some songs, or No / no tap in the "Are you
+  ///   awake?" pop-up: songs play, after 10 minutes they're paused and the
+  ///   check-in rings (its "Play some songs" starts the next 10 minutes);
+  /// - I am awake, or Yes in the pop-up: no check-in.
+  bool _checkInSet = false;
+
+  void _scheduleSongsCheckIn() {
+    if (!widget.fromAlarm) return;
+    _checkInSet = true;
+    AlarmService.scheduleCheckIn(widget.store, delay: AlarmService.songsCheckInDelay);
+  }
+
+  void _cancelCheckIn() {
+    if (!_checkInSet) return;
+    _checkInSet = false;
+    Alarm.stop(AlarmService.checkInId);
+  }
 
   Lang get _lang => widget.store.lang;
 
@@ -67,13 +94,21 @@ class _SurpriseScreenState extends State<SurpriseScreen> {
     super.initState();
     // Stay visible over the lock screen. The alarm plugin turns this off
     // when the alarm stops, so set it again shortly after.
+    // The screen also stays on until I am awake is tapped, so the phone
+    // can't lock again in the middle of the surprise.
     for (final ms in [0, 600, 1500]) {
       Future<void>.delayed(Duration(milliseconds: ms), () {
-        if (mounted) LockScreen.showOver(true);
+        if (!mounted) return;
+        LockScreen.showOver(true);
+        if (!_confirmedAwake) LockScreen.keepScreenOn(true);
       });
     }
-    if (widget.fromAlarm) AlarmService.scheduleCheckIn(widget.store);
     _surprise = _pick();
+    // Connect to Spotify right away (while the voice speaks), so songs can
+    // start without delay later. Does nothing if Spotify isn't set up.
+    unawaited(SongPlayer.connect(onlyIfConnectedBefore: true));
+    // A song needs no tap: after 10 minutes of songs, the check-in.
+    if (_surprise?.type == SurpriseType.song) _scheduleSongsCheckIn();
     if (widget.fromAlarm) FeedbackService.schedule(widget.store, _surprise?.type);
     final s = _surprise;
     if (s != null) _present(s, s.morningMessage(widget.store.userName, _lang));
@@ -81,12 +116,14 @@ class _SurpriseScreenState extends State<SurpriseScreen> {
 
   /// Speaks [first]. Then:
   /// - song: starts the song (Spotify keeps playing similar songs after it),
-  /// - everything else: 20 s after the voice has finished, says it again,
-  ///   until the user taps I am awake or Play surprise songs. Answering a
+  /// - everything else: 30 s of waiting music after the voice has finished,
+  ///   then says it again, until the user taps I am awake or Play some songs. Answering a
   ///   quiz or solving a riddle opens the "Are you awake?" pop-up instead.
   Future<void> _present(Surprise s, String first) async {
     final loop = ++_loop;
+    await _music.stop();
     var text = first;
+    var said = 1;
     while (true) {
       final finished = await _speaker.say(text);
       if (!finished || !mounted || loop != _loop) return;
@@ -95,18 +132,55 @@ class _SurpriseScreenState extends State<SurpriseScreen> {
         return;
       }
       if (!_waitingForTap) return;
+      // Quiz, riddle or challenge not done yet: waiting music in the pause.
+      final music = _wantsWaitingMusic(s);
+      if (music) unawaited(_startMusic());
       await Future<void>.delayed(_repeatPause);
-      if (!mounted || loop != _loop || !_waitingForTap) return;
+      if (!mounted || loop != _loop) return; // a newer loop owns the music now
+      if (music) await _music.stop();
+      if (!_waitingForTap) return;
+      // Still no reaction after 4 repeats: the alarm rings again, loud.
+      if (widget.fromAlarm && said >= _saysBeforeRingAgain) {
+        await _ringAgain();
+        return;
+      }
+      said++;
       text = first;
     }
   }
+
+  final _music = WaitingMusic.shared;
+
+  /// Closes the surprise and lets the alarm ring again at full volume. Its
+  /// ringing screen / notification offers Surprise me and Stop again.
+  Future<void> _ringAgain() async {
+    _loop++;
+    await _music.stop();
+    await _speaker.stop();
+    await AlarmService.ringAgain(widget.store);
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  /// Starts the thinking music; says why on screen if it can't play.
+  Future<void> _startMusic() async {
+    final error = await _music.start();
+    if (error != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(tr(_lang, 'Waiting music could not play: $error', 'Wartemusik konnte nicht starten: $error'))),
+      );
+    }
+  }
+
+  /// Waiting music in every pause while the surprise waits for a tap
+  /// (quiz, riddle and mini challenge alike).
+  bool _wantsWaitingMusic(Surprise s) => s.type != SurpriseType.song && _waitingForTap;
 
   Future<void> _playSong(Surprise s) async {
     await _speaker.stop();
     final ok = await SongPlayer.play(s);
     if (!ok && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr(_lang, "Couldn't start the song. Is Spotify installed?", 'Der Song konnte nicht starten. Ist Spotify installiert?'))),
+        SnackBar(content: Text(tr(_lang, "The song didn't start. Check that Spotify is installed and connected (home screen).", 'Der Song ist nicht gestartet. Prüfe, ob Spotify installiert und verbunden ist (Startbildschirm).'))),
       );
     }
   }
@@ -134,19 +208,32 @@ class _SurpriseScreenState extends State<SurpriseScreen> {
   void _imUp() {
     if (_awake) return;
     _loop++;
-    setState(() => _awake = true);
+    unawaited(_music.stop());
+    setState(() {
+      _awake = true;
+      _confirmedAwake = true;
+    });
+    LockScreen.keepScreenOn(false); // awake: the screen may turn off again
+    _cancelCheckIn(); // awake: no check-in
     _speaker.say(tr(_lang, "Great, you're awake! Have a lovely day.", 'Super, du bist wach! Hab einen schönen Tag.'));
   }
 
-  /// Stops repeating and starts the surprise songs in Spotify.
-  Future<void> _playSurpriseSongs() async {
+  /// Stops repeating and starts the surprise songs in Spotify. With
+  /// [checkIn], the songs are paused after 10 minutes and the check-in rings.
+  Future<void> _playSurpriseSongs({bool checkIn = true}) async {
     _loop++;
-    setState(() => _awake = true);
+    await _music.stop();
+    setState(() => _awake = true); // the screen stays on: not confirmed awake
+    if (checkIn) {
+      _scheduleSongsCheckIn();
+    } else {
+      _cancelCheckIn();
+    }
     await _speaker.stop();
     final ok = await SongPlayer.playSurpriseSongs();
     if (!ok && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr(_lang, "Couldn't start the songs. Is Spotify installed?", 'Die Songs konnten nicht starten. Ist Spotify installiert?'))),
+        SnackBar(content: Text(tr(_lang, "The songs didn't start. Check that Spotify is installed and connected (home screen).", 'Die Songs sind nicht gestartet. Prüfe, ob Spotify installiert und verbunden ist (Startbildschirm).'))),
       );
     }
   }
@@ -163,55 +250,32 @@ class _SurpriseScreenState extends State<SurpriseScreen> {
   /// 10 seconds after the voice finished: the surprise songs start.
   Future<void> _askAwake(String said) async {
     _loop++; // no more repeats
+    unawaited(_music.stop());
     final voice = _speaker.say('$said ${tr(_lang, 'Are you awake?', 'Bist du wach?')}');
-    final yes = await showDialog<bool>(
+    // true = Yes, false = No, null = no tap within 10 seconds.
+    final answer = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (_) => _AwakeDialog(lang: _lang, voiceDone: voice),
     );
     if (!mounted || _awake) return;
-    if (yes == true) {
+    if (answer == true) {
       _imUp();
     } else {
+      // No, or no tap: like Play some songs (check-in after 10 min).
       await _playSurpriseSongs();
-    }
-  }
-
-  void _readAgain() {
-    final s = _surprise;
-    if (s != null) _present(s, s.spokenIn(_lang));
-  }
-
-  void _stopReading() {
-    _loop++;
-    _speaker.stop();
-  }
-
-  void _another() {
-    setState(() {
-      _surprise = _pick();
-      _picked = null;
-      _confirmed = false;
-      _awake = false;
-    });
-    final s = _surprise;
-    if (widget.fromAlarm) FeedbackService.schedule(widget.store, s?.type);
-    if (s != null) _present(s, s.anotherIn(_lang));
-  }
-
-  Future<void> _open(String url) async {
-    await _speaker.stop();
-    final ok = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-    if (!ok && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Couldn't open the music app.")),
-      );
     }
   }
 
   @override
   void dispose() {
     _loop++;
+    _music.stop();
+    // From the alarm, only I am awake lets the screen turn off again
+    // (a song has no I am awake: leaving its screen is enough).
+    if (_confirmedAwake || !widget.fromAlarm || _surprise?.type == SurpriseType.song) {
+      LockScreen.keepScreenOn(false);
+    }
     _speaker.stop();
     LockScreen.showOver(false);
     super.dispose();
@@ -330,21 +394,12 @@ class _SurpriseScreenState extends State<SurpriseScreen> {
             ],
           ],
         ),
-      SurpriseType.story => ListView(
-          children: [
-            Text(s.titleIn(_lang) ?? tr(_lang, 'A little story', 'Eine kleine Geschichte'), style: _big),
-            const SizedBox(height: 8),
-            if (s.moodIn(_lang) != null) Text(s.moodIn(_lang)!, style: _sub),
-            const SizedBox(height: 16),
-            Text(s.textIn(_lang).trim(), style: const TextStyle(fontSize: 17, height: 1.6, color: DawnColors.ink)),
-          ],
-        ),
     };
   }
 
   String get _repeatHint => tr(_lang,
-      'The voice repeats this every 20 seconds until you tap I am awake or Play surprise songs.',
-      'Die Stimme wiederholt das alle 20 Sekunden, bis du auf Ich bin wach oder Überraschungssongs abspielen tippst.');
+      'The voice repeats this every 30 seconds until you tap I am awake or Play some songs.',
+      'Die Stimme wiederholt das alle 30 Sekunden, bis du auf Ich bin wach oder Spiel ein paar Songs tippst.');
 
   Widget _quizBody(Surprise s) {
     final options = s.optionsIn(_lang);
@@ -403,7 +458,7 @@ class _SurpriseScreenState extends State<SurpriseScreen> {
       minimumSize: const Size.fromHeight(56),
     );
 
-    // Waiting for a tap: only I am awake or Play surprise songs.
+    // Waiting for a tap: only I am awake or Play some songs.
     if (_waitingForTap) {
       return [
         FilledButton(
@@ -426,48 +481,13 @@ class _SurpriseScreenState extends State<SurpriseScreen> {
       ];
     }
 
-    final query = Uri.encodeComponent(s.songQuery);
+    // Song: Spotify plays, no buttons needed.
+    if (s.type == SurpriseType.song) return const [];
     return [
-      if (s.type == SurpriseType.song) ...[
-        FilledButton(style: primary, onPressed: () => _playSong(s), child: Text(tr(_lang, 'Play again', 'Nochmal abspielen'))),
-        const SizedBox(height: 12),
-        OutlinedButton(
-          style: secondary,
-          onPressed: () => _open('https://www.youtube.com/results?search_query=$query'),
-          child: Text(tr(_lang, 'Find on YouTube', 'Auf YouTube suchen')),
-        ),
-        const SizedBox(height: 12),
-      ],
-      if (s.type == SurpriseType.story)
-        Row(
-          children: [
-            TextButton.icon(
-              onPressed: _readAgain,
-              icon: const Icon(Icons.replay, color: DawnColors.ink),
-              label: Text(tr(_lang, 'Read again', 'Nochmal vorlesen'), style: const TextStyle(color: DawnColors.ink)),
-            ),
-            const Spacer(),
-            TextButton.icon(
-              onPressed: _stopReading,
-              icon: const Icon(Icons.stop_circle_outlined, color: DawnColors.ink),
-              label: Text(tr(_lang, 'Stop reading', 'Vorlesen stoppen'), style: const TextStyle(color: DawnColors.ink)),
-            ),
-          ],
-        ),
-      Row(
-        children: [
-          Expanded(
-            child: OutlinedButton(style: secondary, onPressed: _another, child: Text(tr(_lang, 'Another one', 'Noch eine'))),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: FilledButton(
-              style: primary,
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(tr(_lang, 'Start my day', 'Los geht der Tag')),
-            ),
-          ),
-        ],
+      FilledButton(
+        style: primary,
+        onPressed: () => Navigator.of(context).pop(),
+        child: Text(tr(_lang, 'Start my day', 'Los geht der Tag')),
       ),
     ];
   }
@@ -500,7 +520,7 @@ class _AwakeDialogState extends State<_AwakeDialog> {
         if (!mounted) return;
         final left = (_left ?? _seconds) - 1;
         if (left <= 0) {
-          _close(false);
+          _close(null); // no tap
         } else {
           setState(() => _left = left);
         }
@@ -508,7 +528,7 @@ class _AwakeDialogState extends State<_AwakeDialog> {
     });
   }
 
-  void _close(bool awake) {
+  void _close(bool? awake) {
     _timer?.cancel();
     if (mounted) Navigator.of(context).pop(awake);
   }
@@ -529,8 +549,8 @@ class _AwakeDialogState extends State<_AwakeDialog> {
         title: Text(tr(l, 'Are you awake?', 'Bist du wach?'), style: const TextStyle(fontSize: 26)),
         content: Text(
           left == null
-              ? tr(l, 'If not, the surprise songs will wake you up.', 'Wenn nicht, wecken dich gleich die Überraschungssongs.')
-              : tr(l, 'Surprise songs start in $left s.', 'Überraschungssongs starten in $left s.'),
+              ? tr(l, 'If not, some songs will wake you up.', 'Wenn nicht, wecken dich gleich ein paar Songs.')
+              : tr(l, 'Songs start in $left s.', 'Songs starten in $left s.'),
           style: const TextStyle(fontSize: 17),
         ),
         actions: [

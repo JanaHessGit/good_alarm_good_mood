@@ -13,6 +13,8 @@
 
   <application>
     <receiver android:name="com.gdelataillade.alarm.alarm.AlarmReceiver" android:exported="true" />
+    <!-- DAWNBOX CHANGE: second notification button, see DawnboxActionReceiver.kt -->
+    <receiver android:name="com.gdelataillade.alarm.alarm.DawnboxActionReceiver" android:exported="false" />
     <receiver
       android:name="com.gdelataillade.alarm.alarm.BootReceiver"
       android:enabled="true"

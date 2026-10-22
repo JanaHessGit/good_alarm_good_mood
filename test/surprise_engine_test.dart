@@ -51,15 +51,6 @@ void main() {
     expect(q.needsResponse, isTrue);
   });
 
-  test('stories exist and each takes about three minutes to read', () {
-    final stories = starterContent.where((s) => s.type == SurpriseType.story).toList();
-    expect(stories, isNotEmpty);
-    for (final st in stories) {
-      final words = st.text.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).length;
-      expect(words, inInclusiveRange(400, 650), reason: st.id);
-    }
-  });
-
   test('weekend picks skip weekday-only items', () {
     final engine = SurpriseEngine(content: starterContent, random: Random(3));
     final history = SurpriseHistory();
@@ -113,7 +104,7 @@ void main() {
     expect(q.quizFeedback(0, Lang.de), 'Nicht ganz. Die richtige Antwort ist B: Wal.');
   });
 
-  test('all quizzes, challenges, riddles and stories have a German version', () {
+  test('all quizzes, challenges and riddles have a German version', () {
     for (final s in starterContent.where((s) => s.type != SurpriseType.song)) {
       expect(s.textDe, isNotNull, reason: s.id);
       if (s.type == SurpriseType.quiz) expect(s.optionsDe.length, 3, reason: s.id);

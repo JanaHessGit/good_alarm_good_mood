@@ -16,6 +16,11 @@ class AlarmService {
   static const checkInId = 2;
   static const checkInDelay = Duration(minutes: 2);
 
+  /// While songs play (song surprise or Play some songs): after this long
+  /// the songs are paused and the check-in rings. Again after every
+  /// "Play some songs" on the check-in.
+  static const songsCheckInDelay = Duration(minutes: 10);
+
   /// Next time [t] happens after [now]: today if still ahead, else tomorrow.
   /// Built from calendar fields, so daylight-saving changes don't shift it.
   static DateTime nextOccurrence(TimeOfDay t, DateTime now) {
@@ -24,7 +29,7 @@ class AlarmService {
     return DateTime(now.year, now.month, now.day + 1, t.hour, t.minute);
   }
 
-  static AlarmSettings _settings(DateTime when, {int snoozeMinutes = 5, Lang lang = Lang.en, AlarmSound sound = AlarmSound.chime}) => AlarmSettings(
+  static AlarmSettings _settings(DateTime when, {int snoozeMinutes = 5, Lang lang = Lang.en, AlarmSound sound = AlarmSound.piano, bool fullVolume = false}) => AlarmSettings(
         id: alarmId,
         dateTime: when,
         assetAudioPath: sound.asset,
@@ -33,15 +38,19 @@ class AlarmService {
         warningNotificationOnKill: Platform.isIOS,
         androidFullScreenIntent: true,
         // Not const: the plugin checks the volume range when it builds this.
-        volumeSettings: VolumeSettings.fade(
-          fadeDuration: const Duration(seconds: 10),
-          volume: 0.8,
-        ),
+        volumeSettings: fullVolume
+            // Not const: the plugin checks the volume range when it builds this.
+            ? VolumeSettings.fixed(volume: 1.0)
+            : VolumeSettings.fade(
+                fadeDuration: const Duration(seconds: 10),
+                volume: 0.8,
+              ),
         // Needed for the notification's second button ("Surprise me").
         androidSnoozeDuration: Duration(minutes: snoozeMinutes),
         notificationSettings: NotificationSettings(
           // Tapping the notification or "Surprise me" opens the app and
-          // starts the surprise, also on a locked phone (packages/alarm).
+          // starts the surprise. "Surprise me" works without unlocking
+          // (packages/alarm, DawnboxActionReceiver).
           title: tr(lang, 'Good morning!', 'Guten Morgen!'),
           body: tr(lang, 'Tap here for your surprise.', 'Tippe hier für deine Überraschung.'),
           stopButton: tr(lang, 'Stop', 'Stopp'),
@@ -84,12 +93,12 @@ class AlarmService {
 
   /// Schedules the check-in. It starts very quietly (a gentle nudge) and
   /// after 30 seconds without a tap it rings at full volume.
-  static Future<void> scheduleCheckIn(SettingsStore store) async {
+  static Future<void> scheduleCheckIn(SettingsStore store, {Duration delay = checkInDelay}) async {
     final de = store.lang == Lang.de;
     await Alarm.set(
       alarmSettings: AlarmSettings(
         id: checkInId,
-        dateTime: DateTime.now().add(checkInDelay),
+        dateTime: DateTime.now().add(delay),
         assetAudioPath: store.alarmSound.asset,
         loopAudio: true,
         vibrate: true,
@@ -107,11 +116,23 @@ class AlarmService {
         notificationSettings: NotificationSettings(
           title: de ? 'Schläfst du noch?' : 'Still sleeping?',
           body: de ? 'Wenn nicht, tippe hier.' : 'If not, tap here.',
-          stopButton: de ? 'Ich bin wach' : "I'm up",
+          stopButton: de ? 'Ich bin wach' : 'I am awake',
+          // Second button: opens Dawnbox, which starts songs in Spotify
+          // (packages/alarm, DawnboxActionReceiver).
+          androidSnoozeButton: de ? 'Spiel ein paar Songs' : 'Play some songs',
         ),
+        // Needed so the plugin accepts the second button.
+        androidSnoozeDuration: const Duration(minutes: 5),
       ),
     );
   }
+
+  /// Nobody reacted to the surprise: ring again in 2 seconds, at full
+  /// volume and without fade-in, with Surprise me / Stop as usual.
+  /// (Replaces tomorrow's alarm for now; it is re-armed once this one ends.)
+  static Future<void> ringAgain(SettingsStore store) => Alarm.set(
+      alarmSettings: _settings(DateTime.now().add(const Duration(seconds: 2)),
+          snoozeMinutes: store.snoozeMinutes, lang: store.lang, sound: store.alarmSound, fullVolume: true));
 
   /// For testing on the phone: ring a few seconds from now.
   static Future<void> ringIn(SettingsStore store, Duration delay) => Alarm.set(

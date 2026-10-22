@@ -1,5 +1,5 @@
 /// The kinds of surprise Dawnbox can deliver after the alarm.
-enum SurpriseType { quiz, song, challenge, story, riddle }
+enum SurpriseType { quiz, song, challenge, riddle }
 
 /// Language of everything the voice says. Follows the chosen voice.
 enum Lang { en, de }
@@ -14,7 +14,6 @@ extension SurpriseTypeLabel on SurpriseType {
         SurpriseType.quiz => 'Quiz',
         SurpriseType.song => 'Song',
         SurpriseType.challenge => tr(lang, 'Mini challenge', 'Mini-Challenge'),
-        SurpriseType.story => tr(lang, 'Story time', 'Geschichte'),
         SurpriseType.riddle => tr(lang, 'Riddle', 'Rätsel'),
       };
 }
@@ -49,7 +48,7 @@ class Surprise {
   final String id;
   final SurpriseType type;
 
-  /// Quiz question, song title, challenge description or the whole story.
+  /// Quiz question, song title, challenge description or riddle.
   final String text;
   final String? textDe;
 
@@ -68,7 +67,7 @@ class Surprise {
   final String? fact;
   final String? factDe;
 
-  /// Story: title and mood ("Funny", "Heartwarming", ...).
+  /// Optional title and mood (not used by the current content).
   final String? title;
   final String? titleDe;
   final String? mood;
@@ -102,12 +101,12 @@ class Surprise {
   }
 
   /// Everything except songs is repeated (every 20 s) until the user taps
-  /// I am awake or Play surprise songs, so a half-asleep person can't just
+  /// I am awake or Play some songs, so a half-asleep person can't just
   /// ignore it.
   bool get needsResponse => type != SurpriseType.song;
 
   /// Label of the second way out: start the surprise songs in Spotify.
-  static String playSongsLabel(Lang l) => tr(l, 'Play surprise songs', 'Überraschungssongs abspielen');
+  static String playSongsLabel(Lang l) => tr(l, 'Play some songs', 'Spiel ein paar Songs');
 
   /// Label of the riddle button.
   static String showAnswerLabel(Lang l) => tr(l, 'Show answer', 'Lösung zeigen');
@@ -133,8 +132,6 @@ class Surprise {
         return '$text, ${tr(l, 'by', 'von')} $artist.';
       case SurpriseType.challenge:
         return '${textIn(l)} ${tr(l, "Tap I am awake when you're out of bed.", 'Tippe auf Ich bin wach, sobald du aufgestanden bist.')}';
-      case SurpriseType.story:
-        return '${titleIn(l) ?? tr(l, 'A little story', 'Eine kleine Geschichte')}. ${textIn(l)}';
       case SurpriseType.riddle:
         return '${textIn(l)} ${tr(l, 'Think about it, then tap Show answer.', 'Denk kurz nach und tippe dann auf Lösung zeigen.')}';
     }
@@ -160,7 +157,6 @@ class Surprise {
         SurpriseType.quiz => tr(l, 'a little quiz', 'ein kleines Quiz'),
         SurpriseType.song => tr(l, 'a song', 'ein Song'),
         SurpriseType.challenge => tr(l, 'a mini challenge', 'eine Mini-Challenge'),
-        SurpriseType.story => tr(l, 'a story', 'eine Geschichte'),
         SurpriseType.riddle => tr(l, 'a riddle', 'ein Rätsel'),
       };
 

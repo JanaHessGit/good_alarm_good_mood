@@ -12,6 +12,7 @@ import 'screens/home_screen.dart';
 import 'lock_screen.dart';
 import 'screens/ring_screen.dart';
 import 'screens/surprise_screen.dart';
+import 'surprise/song_player.dart';
 import 'settings_store.dart';
 import 'surprise/speaker.dart';
 import 'surprise/surprise.dart';
@@ -90,7 +91,7 @@ class StartupErrorApp extends StatelessWidget {
             padding: const EdgeInsets.all(24),
             children: [
               const Text(
-                'Dawnbox could not start',
+                'Rise & Surprise could not start',
                 style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600, color: DawnColors.royal),
               ),
               const SizedBox(height: 12),
@@ -123,13 +124,21 @@ class _DawnboxAppState extends State<DawnboxApp> {
   bool _ringScreenOpen = false;
   bool _surpriseOpen = false;
 
-  /// Set when the app was opened by "Surprise me" or a tap on the alarm
-  /// notification: skip the ringing screen and start the surprise.
-  DateTime? _surpriseRequestedAt;
-  bool get _surpriseRequested =>
-      _surpriseRequestedAt != null &&
-      DateTime.now().difference(_surpriseRequestedAt!) < const Duration(minutes: 2);
+  /// How the alarm notification opened the app ("tap" or "button"), and
+  /// when. Main alarm: start the surprise. Check-in: "button" plays songs.
+  String? _requested;
+  DateTime? _requestedAt;
   late final Future<void> _launchChecked;
+
+  /// The pending request if it is fresh (under 2 minutes), and clears it.
+  String? _takeRequest() {
+    final r = _requested;
+    final at = _requestedAt;
+    _requested = null;
+    _requestedAt = null;
+    if (r == null || at == null) return null;
+    return DateTime.now().difference(at) < const Duration(minutes: 2) ? r : null;
+  }
 
   @override
   void initState() {
@@ -138,9 +147,13 @@ class _DawnboxAppState extends State<DawnboxApp> {
     // "Surprise me" tapped while the app is already open.
     LockScreen.onLaunchAction(() async {
       await _checkLaunch();
-      final wanted = _surpriseRequested;
-      _surpriseRequestedAt = null;
-      if (wanted && await Alarm.isRinging(AlarmService.alarmId)) _startSurprise();
+      final action = _takeRequest();
+      if (action == null) return;
+      if (await Alarm.isRinging(AlarmService.alarmId)) {
+        _startSurprise();
+      } else if (action == 'button' && await Alarm.isRinging(AlarmService.checkInId)) {
+        await _playSongsFromCheckIn();
+      }
     });
     // Fires when an alarm starts ringing, also if the app was opened
     // by tapping the alarm notification.
@@ -148,7 +161,19 @@ class _DawnboxAppState extends State<DawnboxApp> {
   }
 
   Future<void> _checkLaunch() async {
-    if (await LockScreen.takeLaunchAction() == 'surprise') _surpriseRequestedAt = DateTime.now();
+    final action = await LockScreen.takeLaunchAction();
+    if (action != null) {
+      _requested = action;
+      _requestedAt = DateTime.now();
+    }
+  }
+
+  /// Check-in "Play some songs": stop the check-in and start Spotify.
+  Future<void> _playSongsFromCheckIn() async {
+    await Alarm.stop(AlarmService.checkInId); // the check-in screen closes itself
+    await SongPlayer.playSurpriseSongs();
+    // After 10 minutes of songs: pause them and ask again.
+    await AlarmService.scheduleCheckIn(widget.store, delay: AlarmService.songsCheckInDelay);
   }
 
   /// Alarm off (tomorrow's re-armed) and straight into the surprise.
@@ -177,11 +202,15 @@ class _DawnboxAppState extends State<DawnboxApp> {
       return;
     }
     final ringingAlarm = ringing.alarms.first;
-    if (_surpriseRequested) {
-      _surpriseRequestedAt = null;
-      // The check-in ("Still sleeping?") has no surprise: show it as usual.
+    final action = _takeRequest();
+    if (action != null) {
       if (ringingAlarm.id != AlarmService.checkInId) {
         _startSurprise();
+        return;
+      }
+      // Check-in: the button plays songs; a tap shows the check-in screen.
+      if (action == 'button') {
+        await _playSongsFromCheckIn();
         return;
       }
     }
@@ -213,7 +242,7 @@ class _DawnboxAppState extends State<DawnboxApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Dawnbox',
+      title: 'Rise & Surprise',
       debugShowCheckedModeBanner: false,
       navigatorKey: navigatorKey,
       theme: buildTheme(),

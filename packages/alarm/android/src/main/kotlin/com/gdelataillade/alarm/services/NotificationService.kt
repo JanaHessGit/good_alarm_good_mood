@@ -9,13 +9,19 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.widget.RemoteViews
+import com.gdelataillade.alarm.alarm.R
 import androidx.core.app.NotificationCompat
 import com.gdelataillade.alarm.alarm.AlarmReceiver
+import com.gdelataillade.alarm.alarm.DawnboxActionReceiver
 
 class NotificationHandler(private val context: Context) {
     companion object {
         private const val CHANNEL_ID = "alarm_plugin_channel"
         private const val CHANNEL_NAME = "Alarm Notification"
+        // DAWNBOX CHANGE
+        private const val DAWNBOX_CHANNEL_ID = "dawnbox_surprise_channel"
+        const val DAWNBOX_LAUNCH_NOTIFICATION_ID = 4711
     }
 
     init {
@@ -67,24 +73,59 @@ class NotificationHandler(private val context: Context) {
     }
 
     /**
-     * DAWNBOX CHANGE: opens the app with the extra "dawnboxSurprise" so the
-     * surprise starts at once. An activity intent (not a broadcast), so
-     * Android may open it straight from the lock screen.
+     * DAWNBOX CHANGE: an intent that opens Dawnbox (over the lock screen)
+     * with the extra "dawnboxAction": "tap" (notification tapped) or
+     * "button" (second button). Dawnbox then starts the surprise, or for
+     * the check-in alarm plays songs.
      */
-    private fun surprisePendingIntent(alarmId: Int): PendingIntent? {
+    fun dawnboxActivityIntent(alarmId: Int, dawnboxAction: String): Intent? {
         val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
             ?: return null
         launch.action = "com.gdelataillade.alarm.action.RING"
         launch.removeCategory(Intent.CATEGORY_LAUNCHER)
         launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         launch.putExtra("alarmId", alarmId)
-        launch.putExtra("dawnboxSurprise", true)
+        launch.putExtra("dawnboxAction", dawnboxAction)
+        return launch
+    }
+
+    fun dawnboxLaunchIntent(alarmId: Int, dawnboxAction: String, requestCode: Int): PendingIntent? {
+        val launch = dawnboxActivityIntent(alarmId, dawnboxAction) ?: return null
         return PendingIntent.getActivity(
             context,
-            alarmId + 10000, // own request code, so it never replaces the ring intent
+            requestCode, // own request code, so it never replaces the ring intent
             launch,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+    }
+
+    /**
+     * DAWNBOX CHANGE: called by DawnboxActionReceiver when the second button
+     * is pressed. A button that opens an app directly makes Android ask to
+     * unlock first; a full-screen notification opens Dawnbox over the lock
+     * screen right away (needs "Full screen notifications" on Android 14+).
+     */
+    fun postDawnboxLaunch(alarmId: Int, title: String?) {
+        val launch = dawnboxLaunchIntent(alarmId, "button", alarmId + 30000) ?: return
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                DAWNBOX_CHANNEL_ID, "Surprise", NotificationManager.IMPORTANCE_HIGH
+            ).apply { setSound(null, null) }
+            nm.createNotificationChannel(channel)
+        }
+        val n = NotificationCompat.Builder(context, DAWNBOX_CHANNEL_ID)
+            .setSmallIcon(context.applicationInfo.icon)
+            .setContentTitle(title ?: context.applicationInfo.loadLabel(context.packageManager).toString())
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setContentIntent(launch)
+            .setFullScreenIntent(launch, true)
+            .setAutoCancel(true)
+            .setTimeoutAfter(60_000)
+            .build()
+        nm.notify(DAWNBOX_LAUNCH_NOTIFICATION_ID, n)
     }
 
     fun buildNotification(
@@ -110,9 +151,9 @@ class NotificationHandler(private val context: Context) {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // DAWNBOX CHANGE: tapping the notification starts the surprise.
-        // The full-screen intent below still opens the ringing screen.
-        val surpriseIntent = surprisePendingIntent(alarmId)
+        // DAWNBOX CHANGE: tapping the notification opens Dawnbox with the
+        // surprise. The full-screen intent below still opens the ringing screen.
+        val tapIntent = dawnboxLaunchIntent(alarmId, "tap", alarmId + 10000)
 
         val notificationBuilder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(iconResId)
@@ -122,7 +163,7 @@ class NotificationHandler(private val context: Context) {
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setAutoCancel(true)
             .setOngoing(true)
-            .setContentIntent(surpriseIntent ?: pendingIntent)
+            .setContentIntent(tapIntent ?: pendingIntent)
             .setSound(null)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
 
@@ -147,16 +188,39 @@ class NotificationHandler(private val context: Context) {
             notificationBuilder.setFullScreenIntent(pendingIntent, true)
         }
 
+        // DAWNBOX CHANGE: bigger title and text, also on the lock screen. The
+        // buttons (Stop / Surprise me) stay below it as usual.
+        val bigViews = RemoteViews(context.packageName, R.layout.dawnbox_alarm_notification).apply {
+            setTextViewText(R.id.dawnbox_title, notificationSettings.title)
+            setTextViewText(R.id.dawnbox_body, notificationSettings.body)
+        }
+        notificationBuilder
+            .setStyle(NotificationCompat.DecoratedCustomViewStyle())
+            .setCustomContentView(bigViews)
+            .setCustomBigContentView(bigViews)
+            .setCustomHeadsUpContentView(bigViews)
+
         notificationSettings.let {
             if (it.stopButton != null) {
                 notificationBuilder.addAction(0, it.stopButton, stopPendingIntent)
             }
 
-            // DAWNBOX CHANGE: the second button is "Surprise me" instead of
-            // snooze. It uses the androidSnoozeButton label and opens the app
-            // with the surprise. (Snooze stays available inside the app.)
-            if (it.androidSnoozeButton != null && surpriseIntent != null) {
-                notificationBuilder.addAction(0, it.androidSnoozeButton, surpriseIntent)
+            // DAWNBOX CHANGE: the second button ("Surprise me", or "Play some
+            // songs" on the check-in) replaces snooze. It uses the
+            // androidSnoozeButton label. A broadcast works on the lock screen
+            // without unlocking; DawnboxActionReceiver then opens Dawnbox.
+            if (it.androidSnoozeButton != null) {
+                val buttonIntent = Intent(context, DawnboxActionReceiver::class.java).apply {
+                    putExtra("id", alarmId)
+                    putExtra("title", notificationSettings.title)
+                }
+                val buttonPendingIntent = PendingIntent.getBroadcast(
+                    context,
+                    alarmId + 20000,
+                    buttonIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                notificationBuilder.addAction(0, it.androidSnoozeButton, buttonPendingIntent)
             }
 
             if (it.iconColor != null) {

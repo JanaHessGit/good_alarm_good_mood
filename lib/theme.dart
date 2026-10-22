@@ -21,7 +21,6 @@ class DawnColors {
         SurpriseType.quiz => Icons.quiz_outlined,
         SurpriseType.song => Icons.music_note_rounded,
         SurpriseType.challenge => Icons.explore_outlined,
-        SurpriseType.story => Icons.auto_stories_outlined,
         SurpriseType.riddle => Icons.lightbulb_outline,
       };
 }
@@ -35,4 +34,16 @@ ThemeData buildTheme() => ThemeData(
         surface: Colors.white,
       ),
       scaffoldBackgroundColor: DawnColors.ground,
+      // Selected buttons (e.g. EN / DE) use the dark blue of the alarm card.
+      segmentedButtonTheme: SegmentedButtonThemeData(
+        style: ButtonStyle(
+          backgroundColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.selected) ? DawnColors.royal : Colors.white,
+          ),
+          foregroundColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.selected) ? Colors.white : DawnColors.royal,
+          ),
+          side: const WidgetStatePropertyAll(BorderSide(color: DawnColors.royal)),
+        ),
+      ),
     );

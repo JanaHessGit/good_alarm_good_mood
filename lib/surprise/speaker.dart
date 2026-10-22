@@ -49,6 +49,9 @@ class Speaker {
 
   bool get _wantGerman => preferred?.isGerman ?? german;
 
+  /// Whether the voice speaks German right now.
+  bool get speaksGerman => _wantGerman;
+
   /// Called when the user changes the app language.
   Future<void> switchLanguage({required bool german}) async {
     this.german = german;
@@ -87,15 +90,30 @@ class Speaker {
     }
   }
 
-  /// Uses the picked voice if it's still installed, else the best one.
+  /// Default voices until the user picks one: Google's "iol" (English) and
+  /// "nfh" (German), e.g. en-us-x-iol-local and de-de-x-nfh-local.
+  static const defaultEnglishVoice = 'iol';
+  static const defaultGermanVoice = 'nfh';
+
+  /// The voice in use right now (shown on the home screen).
+  VoiceOption? current;
+
+  /// Uses the picked voice if it's still installed, else the default voice
+  /// (iol / nfh), else the best one of the language.
   Future<void> _pickBestVoice() async {
     final voices = await availableVoices();
     if (voices.isEmpty) return; // keep the phone's default voice
     final want = preferred;
-    final sameLanguage = voices.where((v) => v.isGerman == _wantGerman);
+    final sameLanguage = voices.where((v) => v.isGerman == _wantGerman).toList();
+    final defaultCode = _wantGerman ? defaultGermanVoice : defaultEnglishVoice;
+    final defaults = sameLanguage.where((v) => v.code == defaultCode);
     final chosen = voices.firstWhere(
       (v) => want != null && v.name == want.name && v.locale == want.locale,
-      orElse: () => sameLanguage.isNotEmpty ? sameLanguage.first : voices.first,
+      orElse: () => defaults.isNotEmpty
+          ? defaults.first
+          : sameLanguage.isNotEmpty
+              ? sameLanguage.first
+              : voices.first,
     );
     await _apply(chosen);
   }
@@ -104,6 +122,7 @@ class Speaker {
     try {
       await _tts.setLanguage(v.isGerman ? 'de-DE' : 'en-US');
       await _tts.setVoice({'name': v.name, 'locale': v.locale});
+      current = v;
     } catch (_) {}
   }
 
@@ -136,7 +155,8 @@ class Speaker {
       // Some phones return from speak() before the voice is done. Wait for
       // the "finished" signal too, so pauses really start after speaking.
       if (result == 1) {
-        await done.future.timeout(const Duration(seconds: 60), onTimeout: () {});
+        // At most 10 s, in case a phone never sends that signal.
+        await done.future.timeout(const Duration(seconds: 10), onTimeout: () {});
       }
       if (run != _run) return false;
       await Future<void>.delayed(const Duration(milliseconds: 250));

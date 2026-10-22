@@ -1,9 +1,14 @@
+import 'dart:io' show Platform;
+
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../alarm_service.dart';
 import '../lock_screen.dart';
 import '../settings_store.dart';
+import '../spotify_config.dart';
+import '../surprise/song_player.dart';
 import '../surprise/speaker.dart';
 import '../surprise/surprise.dart';
 import '../theme.dart';
@@ -103,6 +108,27 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
+  /// Connects to Spotify once, so songs can play on a locked phone.
+  Future<void> _connectSpotify(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    if (!SpotifyConfig.isSet) {
+      messenger.showSnackBar(SnackBar(
+        content: Text(tr(_l,
+            'Add your Spotify Client ID in lib/spotify_config.dart first (see README).',
+            'Trage zuerst deine Spotify Client ID in lib/spotify_config.dart ein (siehe README).')),
+      ));
+      return;
+    }
+    final ok = await SongPlayer.connect();
+    messenger.showSnackBar(SnackBar(
+      content: Text(ok
+          ? tr(_l, 'Spotify connected. Songs now also play on a locked phone.',
+              'Spotify verbunden. Songs spielen jetzt auch bei gesperrtem Handy.')
+          : tr(_l, "Couldn't connect. Is Spotify installed and are you logged in?",
+              'Verbindung fehlgeschlagen. Ist Spotify installiert und bist du eingeloggt?')),
+    ));
+  }
+
   Widget _settingRow(String title, String value, VoidCallback onTap) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -147,8 +173,8 @@ class HomeScreen extends StatelessWidget {
                   children: [
                     const Expanded(
                       child: Text(
-                        'Dawnbox',
-                        style: TextStyle(fontSize: 26, fontWeight: FontWeight.w700, color: DawnColors.ink),
+                        'Rise & Surprise',
+                        style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: DawnColors.ink),
                       ),
                     ),
                     SegmentedButton<Lang>(
@@ -183,14 +209,24 @@ class HomeScreen extends StatelessWidget {
                   runSpacing: 8,
                   children: [
                     for (final type in SurpriseType.values)
-                      FilterChip(
-                        label: Text(type.labelIn(_l)),
-                        avatar: Icon(DawnColors.iconFor(type), size: 18),
-                        selected: store.enabledTypes.contains(type),
-                        onSelected: (_) => store.toggleType(type),
-                        selectedColor: DawnColors.royalSoft,
-                        showCheckmark: false,
-                      ),
+                      Builder(builder: (context) {
+                        final on = store.enabledTypes.contains(type);
+                        // Selected: the same dark blue as the alarm card.
+                        return FilterChip(
+                          label: Text(type.labelIn(_l)),
+                          labelStyle: TextStyle(
+                            color: on ? Colors.white : DawnColors.royal,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          avatar: Icon(DawnColors.iconFor(type), size: 18, color: on ? Colors.white : DawnColors.royal),
+                          selected: on,
+                          onSelected: (_) => store.toggleType(type),
+                          selectedColor: DawnColors.royal,
+                          backgroundColor: Colors.white,
+                          side: const BorderSide(color: DawnColors.royal),
+                          showCheckmark: false,
+                        );
+                      }),
                   ],
                 ),
                 const SizedBox(height: 24),
@@ -201,7 +237,7 @@ class HomeScreen extends StatelessWidget {
                 ),
                 _settingRow(
                   tr(_l, 'Voice', 'Stimme'),
-                  store.voice?.label ?? tr(_l, 'Choose a voice', 'Stimme wählen'),
+                  store.voice?.label ?? Speaker.shared.current?.label ?? tr(_l, 'Choose a voice', 'Stimme wählen'),
                   () => showModalBottomSheet<void>(
                     context: context,
                     isScrollControlled: true,
@@ -217,10 +253,12 @@ class HomeScreen extends StatelessWidget {
                     builder: (_) => SoundPicker(store: store),
                   ),
                 ),
-                _InfoRows(
-                  rows: {
-                    tr(_l, 'Surprise starts after', 'Überraschung startet nach'): '${store.autoSurpriseSeconds} s',
-                  },
+                _settingRow(
+                  'Spotify',
+                  SpotifyConfig.isSet
+                      ? tr(_l, 'Connect (once)', 'Verbinden (einmalig)')
+                      : tr(_l, 'Not set up, see README', 'Nicht eingerichtet, siehe README'),
+                  () => _connectSpotify(context),
                 ),
                 const SizedBox(height: 32),
                 SizedBox(
@@ -317,40 +355,6 @@ class _AlarmCard extends StatelessWidget {
   }
 }
 
-class _InfoRows extends StatelessWidget {
-  const _InfoRows({required this.rows});
-
-  final Map<String, String> rows;
-
-  @override
-  Widget build(BuildContext context) {
-    final entries = rows.entries.toList();
-    return Container(
-      decoration: BoxDecoration(
-        color: DawnColors.royalSoft,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFD3DDF9)),
-      ),
-      child: Column(
-        children: [
-          for (var i = 0; i < entries.length; i++) ...[
-            if (i > 0) const Divider(height: 1, color: Color(0xFFD3DDF9)),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              child: Row(
-                children: [
-                  Expanded(child: Text(entries[i].key, style: const TextStyle(fontSize: 15))),
-                  Text(entries[i].value, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
 /// Android 14+: warns if the alarm may not open full screen on a locked
 /// phone (then only a small notification appears), with a button to fix it.
 class _LockScreenCheck extends StatefulWidget {
@@ -363,7 +367,9 @@ class _LockScreenCheck extends StatefulWidget {
 }
 
 class _LockScreenCheckState extends State<_LockScreenCheck> with WidgetsBindingObserver {
-  bool _allowed = true;
+  bool _fullScreenOk = true;
+  bool _overlayOk = true;
+  bool get _allowed => _fullScreenOk && _overlayOk;
 
   @override
   void initState() {
@@ -377,33 +383,66 @@ class _LockScreenCheckState extends State<_LockScreenCheck> with WidgetsBindingO
     if (state == AppLifecycleState.resumed) _check(); // back from Settings
   }
 
-  /// Asked once per app start, until the permission is granted.
-  static bool _askedThisRun = false;
+  /// Each permission is asked once per app start, until it is granted.
+  static bool _askedFullScreen = false;
+  static bool _askedOverlay = false;
 
   Future<void> _check() async {
-    final ok = await LockScreen.canUseFullScreen();
+    final full = await LockScreen.canUseFullScreen();
+    var overlay = true;
+    if (Platform.isAndroid) {
+      try {
+        overlay = await Permission.systemAlertWindow.isGranted;
+      } catch (_) {}
+    }
     if (!mounted) return;
-    if (ok != _allowed) setState(() => _allowed = ok);
-    if (!ok && !_askedThisRun) {
-      _askedThisRun = true;
-      await _ask();
+    if (full != _fullScreenOk || overlay != _overlayOk) {
+      setState(() {
+        _fullScreenOk = full;
+        _overlayOk = overlay;
+      });
+    }
+    if (!full && !_askedFullScreen) {
+      _askedFullScreen = true;
+      await _ask(fullScreen: true);
+    } else if (full && !overlay && !_askedOverlay) {
+      _askedOverlay = true;
+      await _ask(fullScreen: false);
+    }
+  }
+
+  /// Opens the settings page for the first missing permission.
+  Future<void> _openSettings() async {
+    if (!_fullScreenOk) {
+      await LockScreen.openFullScreenSettings();
+    } else if (!_overlayOk) {
+      await Permission.systemAlertWindow.request();
     }
   }
 
   /// Pop-up that explains the permission and opens the right settings page.
-  Future<void> _ask() async {
+  Future<void> _ask({required bool fullScreen}) async {
     final l = widget.lang;
+    final text = fullScreen
+        ? tr(l,
+            'So you can start your surprise or stop the alarm right on the locked phone, '
+                'Rise & Surprise needs "Full screen notifications".\n\n'
+                'On the next page, switch it on for Rise & Surprise, then come back.',
+            'Damit du deine Überraschung direkt am gesperrten Handy starten oder den Wecker stoppen kannst, '
+                'braucht Rise & Surprise „Vollbild-Benachrichtigungen“.\n\n'
+                'Schalte es auf der nächsten Seite für Rise & Surprise ein und komm dann zurück.')
+        : tr(l,
+            'So the alarm always opens Rise & Surprise (and not just a small notification), '
+                'Rise & Surprise needs "Display over other apps".\n\n'
+                'On the next page, switch it on for Rise & Surprise, then come back.',
+            'Damit der Wecker immer Rise & Surprise öffnet (und nicht nur eine kleine Benachrichtigung zeigt), '
+                'braucht Rise & Surprise „Über anderen Apps einblenden“.\n\n'
+                'Schalte es auf der nächsten Seite für Rise & Surprise ein und komm dann zurück.');
     final open = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(tr(l, 'Show the alarm on the lock screen?', 'Wecker auf dem Sperrbildschirm zeigen?')),
-        content: Text(tr(l,
-            'So you can start your surprise or stop the alarm right on the locked phone, '
-                'Dawnbox needs "Full screen notifications".\n\n'
-                'On the next page, switch it on for Dawnbox, then come back.',
-            'Damit du deine Überraschung direkt am gesperrten Handy starten oder den Wecker stoppen kannst, '
-                'braucht Dawnbox „Vollbild-Benachrichtigungen“.\n\n'
-                'Schalte es auf der nächsten Seite für Dawnbox ein und komm dann zurück.')),
+        content: Text(text),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -416,7 +455,7 @@ class _LockScreenCheckState extends State<_LockScreenCheck> with WidgetsBindingO
         ],
       ),
     );
-    if (open == true) await LockScreen.openFullScreenSettings();
+    if (open == true) await _openSettings();
   }
 
   @override
@@ -452,7 +491,7 @@ class _LockScreenCheckState extends State<_LockScreenCheck> with WidgetsBindingO
               const SizedBox(height: 10),
               FilledButton(
                 style: FilledButton.styleFrom(backgroundColor: DawnColors.royal),
-                onPressed: LockScreen.openFullScreenSettings,
+                onPressed: _openSettings,
                 child: Text(tr(widget.lang, 'Open settings', 'Einstellungen öffnen')),
               ),
             ],
@@ -498,7 +537,7 @@ class _VoicePickerState extends State<VoicePicker> {
 
   @override
   Widget build(BuildContext context) {
-    final current = widget.store.voice;
+    final current = widget.store.voice ?? Speaker.shared.current;
     final l = widget.store.lang;
     return SafeArea(
       child: SizedBox(

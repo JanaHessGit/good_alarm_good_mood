@@ -26,8 +26,8 @@ class LockScreen {
     }
   }
 
-  /// "surprise" if the app was opened by "Surprise me" or a tap on the
-  /// alarm notification, else null. Each launch is reported only once.
+  /// How the alarm notification opened the app: "tap" (notification
+  /// tapped), "button" (Surprise me / Play some songs), else null. Each launch is reported only once.
   static Future<String?> takeLaunchAction() async {
     if (!Platform.isAndroid) return null;
     try {
@@ -42,6 +42,36 @@ class LockScreen {
     _channel.setMethodCallHandler((call) async {
       if (call.method == 'launchAction') handler();
     });
+  }
+
+  /// Keeps the screen on (true) while a surprise runs, so the phone doesn't
+  /// turn the screen off and lock again in the middle of it.
+  static Future<void> keepScreenOn(bool on) async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _channel.invokeMethod<void>('keepScreenOn', on);
+    } catch (_) {}
+  }
+
+  /// Is the phone locked right now?
+  static Future<bool> isLocked() async {
+    if (!Platform.isAndroid) return false;
+    try {
+      return await _channel.invokeMethod<bool>('isLocked') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Asks Android to unlock (fingerprint, face or PIN). True when unlocked
+  /// or not locked at all, false if the user cancelled.
+  static Future<bool> requestUnlock() async {
+    if (!Platform.isAndroid) return true;
+    try {
+      return await _channel.invokeMethod<bool>('requestUnlock') ?? true;
+    } catch (_) {
+      return true; // unknown: just try
+    }
   }
 
   static Future<void> openFullScreenSettings() async {

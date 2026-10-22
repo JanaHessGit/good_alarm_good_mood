@@ -5,7 +5,6 @@ import 'package:alarm/utils/alarm_set.dart';
 import 'package:flutter/material.dart';
 
 import '../alarm_service.dart';
-import '../feedback_service.dart';
 import '../lock_screen.dart';
 import '../settings_store.dart';
 import '../surprise/surprise.dart';
@@ -44,6 +43,7 @@ class _RingScreenState extends State<RingScreen> {
     });
     // Keep this screen on top of the lock screen while it rings.
     LockScreen.showOver(true);
+    LockScreen.keepScreenOn(true); // the phone must not lock while it rings
     // Stopped or surprise started from the notification instead of this screen:
     // close quietly and make sure tomorrow's alarm is set.
     _ringingSub = Alarm.ringing.listen((ringing) async {
@@ -52,6 +52,7 @@ class _RingScreenState extends State<RingScreen> {
       _ticker?.cancel();
       await AlarmService.ensureScheduled(widget.store);
       await LockScreen.showOver(false);
+      await LockScreen.keepScreenOn(false);
       if (mounted) Navigator.of(context).pop();
     });
   }
@@ -75,9 +76,9 @@ class _RingScreenState extends State<RingScreen> {
     _handled = true;
     _ticker?.cancel();
     await AlarmService.stopAndRearm(widget.store);
-    await AlarmService.scheduleCheckIn(widget.store);
-    await FeedbackService.schedule(widget.store, null);
+    // Stop without surprise: no check-in and no feedback notification.
     await LockScreen.showOver(false);
+    await LockScreen.keepScreenOn(false);
     if (!mounted) return;
     Navigator.of(context).pop();
   }

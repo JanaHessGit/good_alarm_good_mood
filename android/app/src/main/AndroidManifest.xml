@@ -11,9 +11,11 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
     <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+    <!-- "Display over other apps": lets the alarm always switch to the app -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
 
     <application
-        android:label="Dawnbox"
+        android:label="Rise &amp; Surprise"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -42,6 +44,17 @@
                 <category android:name="android.intent.category.DEFAULT"/>
             </intent-filter>
         </activity>
+        <!-- Spotify connection (spotify_sdk): returns from Spotify's "agree" screen -->
+        <activity
+            android:name="com.spotify.sdk.android.auth.browser.RedirectUriReceiverActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="spotify-sdk" android:host="auth"/>
+            </intent-filter>
+        </activity>
         <meta-data
             android:name="flutterEmbedding"
             android:value="2"/>
@@ -63,13 +76,9 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
-        <!-- Lets the app start songs in Spotify or YouTube Music -->
-        <intent>
-            <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH"/>
-        </intent>
+        <!-- Lets the app start songs in Spotify -->
         <package android:name="com.spotify.music"/>
-        <package android:name="com.google.android.apps.youtube.music"/>
-        <!-- Lets the app open Spotify and YouTube links -->
+        <!-- Lets the app open Spotify web links (if the app is missing) -->
         <intent>
             <action android:name="android.intent.action.VIEW"/>
             <data android:scheme="https"/>

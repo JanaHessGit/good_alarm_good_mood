@@ -12,6 +12,9 @@ import android.app.Notification
 import android.content.Intent
 import android.content.Context
 import android.content.pm.ServiceInfo
+import android.media.AudioManager
+import android.provider.Settings
+import android.view.KeyEvent
 import android.os.IBinder
 import android.os.PowerManager
 import android.os.Build
@@ -208,6 +211,11 @@ class AlarmService : Service() {
     }
 
     private fun ringAlarm(id: Int, alarmSettings: AlarmSettings) {
+        // DAWNBOX CHANGE: pause music that is playing (e.g. the surprise songs
+        // in Spotify), so the alarm or the "Still sleeping?" check-in isn't
+        // drowned out. Same as pressing pause on headphones.
+        pauseOtherMedia()
+
         // Build the notification
         val notificationHandler = NotificationHandler(this)
         val pendingIntent = ringPendingIntent(id, alarmSettings)
@@ -243,6 +251,7 @@ class AlarmService : Service() {
 
         if (alarmSettings.androidFullScreenIntent) {
             AlarmRingingLiveData.instance.update(true)
+            openAlarmScreen(id, alarmSettings) // DAWNBOX CHANGE
         }
 
         // Notify the plugin about the alarm ringing
@@ -345,7 +354,32 @@ class AlarmService : Service() {
      * start Flutter.
      */
     private fun ringPendingIntent(id: Int, alarmSettings: AlarmSettings): PendingIntent {
-        val ringIntent = resolveRingIntent()?.apply {
+        return PendingIntent.getActivity(
+            this,
+            id,
+            ringIntent(id, alarmSettings),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+    }
+
+    /**
+     * DAWNBOX CHANGE: opens the alarm screen directly, in addition to the
+     * full-screen notification. Android sometimes shows only the
+     * notification (depending on phone and screen state); with "Display
+     * over other apps" allowed, an app may open its screen itself, so the
+     * alarm always switches to Dawnbox, also over the lock screen.
+     */
+    private fun openAlarmScreen(id: Int, alarmSettings: AlarmSettings) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) return
+        try {
+            startActivity(ringIntent(id, alarmSettings))
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not open the alarm screen: ${e.message}")
+        }
+    }
+
+    private fun ringIntent(id: Int, alarmSettings: AlarmSettings): Intent {
+        return resolveRingIntent()?.apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             putExtra(EXTRA_ALARM_ID, id)
             putExtra(EXTRA_ALARM_TITLE, alarmSettings.notificationSettings.title)
@@ -359,13 +393,18 @@ class AlarmService : Service() {
         } ?: applicationContext.packageManager
             .getLaunchIntentForPackage(applicationContext.packageName)
             ?: Intent()
+    }
 
-        return PendingIntent.getActivity(
-            this,
-            id,
-            ringIntent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
+    /** DAWNBOX CHANGE: sends a media "pause" key to whatever is playing. */
+    private fun pauseOtherMedia() {
+        try {
+            val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            if (!am.isMusicActive) return
+            am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PAUSE))
+            am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PAUSE))
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not pause other media: ${e.message}")
+        }
     }
 
     /** The application's own alarm activity, or null when it declares none. */

@@ -7,12 +7,13 @@ import 'package:flutter/material.dart';
 import '../alarm_service.dart';
 import '../lock_screen.dart';
 import '../settings_store.dart';
+import '../surprise/song_player.dart';
 import '../surprise/speaker.dart';
 import '../surprise/surprise.dart';
 import '../theme.dart';
 
 /// Shown by the check-in alarm two minutes after waking up: "Still sleeping?
-/// If not, tap here." One big button.
+/// If not, tap here." with I am awake and Play some songs.
 /// The alarm starts very quietly; after 30 seconds without a tap it rings
 /// at full volume (set up in AlarmService.scheduleCheckIn).
 class CheckInScreen extends StatefulWidget {
@@ -34,6 +35,7 @@ class _CheckInScreenState extends State<CheckInScreen> {
   void initState() {
     super.initState();
     LockScreen.showOver(true);
+    LockScreen.keepScreenOn(true); // stays on until I am awake
     Speaker.shared.say(tr(_lang, 'Still sleeping? If not, tap here.', 'Schläfst du noch? Wenn nicht, tippe hier.'));
     // Confirmed from the notification instead: just close.
     _ringingSub = Alarm.ringing.listen((ringing) {
@@ -44,7 +46,19 @@ class _CheckInScreenState extends State<CheckInScreen> {
   Future<void> _confirm() async {
     if (_done) return;
     await Alarm.stop(AlarmService.checkInId);
+    await LockScreen.keepScreenOn(false); // awake: the screen may turn off again
     await Speaker.shared.say(tr(_lang, 'Perfect. Have a great day!', 'Perfekt. Hab einen tollen Tag!'));
+    _close();
+  }
+
+  /// Stops the check-in and starts feel-good songs in Spotify.
+  Future<void> _playSongs() async {
+    if (_done) return;
+    await Speaker.shared.stop();
+    await Alarm.stop(AlarmService.checkInId);
+    await SongPlayer.playSurpriseSongs();
+    // After 10 minutes of songs: pause them and ask again.
+    await AlarmService.scheduleCheckIn(widget.store, delay: AlarmService.songsCheckInDelay);
     _close();
   }
 
@@ -97,6 +111,21 @@ class _CheckInScreenState extends State<CheckInScreen> {
                     ),
                     onPressed: _confirm,
                     child: Text(Surprise.imUpLabel(_lang)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  height: 60,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      side: const BorderSide(color: DawnColors.royalLine),
+                      textStyle: const TextStyle(fontSize: 17, fontWeight: FontWeight.w500),
+                    ),
+                    onPressed: _playSongs,
+                    icon: const Icon(Icons.music_note_rounded),
+                    label: Text(tr(_lang, 'Play some songs', 'Spiel ein paar Songs')),
                   ),
                 ),
               ],
