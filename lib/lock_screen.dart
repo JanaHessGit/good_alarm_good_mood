@@ -26,6 +26,24 @@ class LockScreen {
     }
   }
 
+  /// "surprise" if the app was opened by "Surprise me" or a tap on the
+  /// alarm notification, else null. Each launch is reported only once.
+  static Future<String?> takeLaunchAction() async {
+    if (!Platform.isAndroid) return null;
+    try {
+      return await _channel.invokeMethod<String>('takeLaunchAction');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Called when "Surprise me" is tapped while the app is already running.
+  static void onLaunchAction(void Function() handler) {
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'launchAction') handler();
+    });
+  }
+
   static Future<void> openFullScreenSettings() async {
     if (!Platform.isAndroid) return;
     try {

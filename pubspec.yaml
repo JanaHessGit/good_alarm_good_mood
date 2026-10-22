@@ -9,7 +9,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  alarm: ^5.15.0
+  # Dawnbox's own copy of alarm 5.15.0 with a "Surprise me" notification button.
+  alarm:
+    path: packages/alarm
   android_intent_plus: ^6.1.0
   audioplayers: ^6.8.1
   flutter_local_notifications: ^22.3.2

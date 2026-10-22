@@ -20,6 +20,7 @@ class SettingsStore extends ChangeNotifier {
   static const _kMinute = 'alarm_minute';
   static const _kEnabled = 'alarm_enabled';
   static const _kTypes = 'enabled_types';
+  static const _kTypesKnown = 'types_known';
   static const _kHistory = 'surprise_history';
   static const _kAutoSeconds = 'auto_surprise_seconds';
   static const _kSnoozeMinutes = 'snooze_minutes';
@@ -67,7 +68,15 @@ class SettingsStore extends ChangeNotifier {
   Set<SurpriseType> get enabledTypes {
     final names = _prefs.getStringList(_kTypes);
     if (names == null) return SurpriseType.values.toSet();
-    final types = SurpriseType.values.where((t) => names.contains(t.name)).toSet();
+    // Types that existed when the choice was saved. Newer ones start on.
+    final known = _prefs.getStringList(_kTypesKnown) ?? const ['quiz', 'song', 'challenge', 'adventure', 'story'];
+    final types = SurpriseType.values
+        .where((t) =>
+            names.contains(t.name) ||
+            !known.contains(t.name) ||
+            // 'adventure' is the old name of 'challenge'.
+            (t == SurpriseType.challenge && names.contains('adventure')))
+        .toSet();
     // Saved by an older version with types that no longer exist: use all.
     return types.isEmpty ? SurpriseType.values.toSet() : types;
   }
@@ -133,6 +142,7 @@ class SettingsStore extends ChangeNotifier {
       types.add(type);
     }
     await _prefs.setStringList(_kTypes, types.map((t) => t.name).toList());
+    await _prefs.setStringList(_kTypesKnown, SurpriseType.values.map((t) => t.name).toList());
     notifyListeners();
   }
 

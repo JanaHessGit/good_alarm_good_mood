@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -19,8 +21,8 @@ const _weekdaysDe = [
   'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag',
 ];
 
-/// Pause between repeats while a quiz or adventure waits for a tap.
-const _repeatPause = Duration(seconds: 10);
+/// Pause between repeats until I am awake or Play surprise songs is tapped.
+const _repeatPause = Duration(seconds: 20);
 
 class SurpriseScreen extends StatefulWidget {
   const SurpriseScreen({super.key, required this.store, this.fromAlarm = false});
@@ -46,15 +48,18 @@ class _SurpriseScreenState extends State<SurpriseScreen> {
   /// Quiz: the option the user picked, null while unanswered.
   int? _picked;
 
-  /// Adventure: user confirmed they're up.
+  /// Riddle: answer revealed.
   bool _confirmed = false;
+
+  /// I am awake or Play surprise songs was tapped: stop repeating.
+  bool _awake = false;
 
   Lang get _lang => widget.store.lang;
 
   bool get _waitingForTap {
     final s = _surprise;
     if (s == null || !s.needsResponse) return false;
-    return s.type == SurpriseType.quiz ? _picked == null : !_confirmed;
+    return !_awake;
   }
 
   @override
@@ -75,9 +80,10 @@ class _SurpriseScreenState extends State<SurpriseScreen> {
   }
 
   /// Speaks [first]. Then:
-  /// - quiz / adventure: repeats every 10 s until the user taps,
-  /// - song: starts the song,
-  /// - story / anything else: done.
+  /// - song: starts the song (Spotify keeps playing similar songs after it),
+  /// - everything else: 20 s after the voice has finished, says it again,
+  ///   until the user taps I am awake or Play surprise songs. Answering a
+  ///   quiz or solving a riddle opens the "Are you awake?" pop-up instead.
   Future<void> _present(Surprise s, String first) async {
     final loop = ++_loop;
     var text = first;
@@ -91,7 +97,7 @@ class _SurpriseScreenState extends State<SurpriseScreen> {
       if (!_waitingForTap) return;
       await Future<void>.delayed(_repeatPause);
       if (!mounted || loop != _loop || !_waitingForTap) return;
-      text = s.repeatIn(_lang);
+      text = first;
     }
   }
 
@@ -121,16 +127,54 @@ class _SurpriseScreenState extends State<SurpriseScreen> {
   void _answer(int i) {
     final s = _surprise;
     if (s == null || _picked != null) return;
-    _loop++; // stop repeating
     setState(() => _picked = i);
-    _speaker.say(s.quizFeedback(i, _lang));
+    _askAwake(s.quizFeedback(i, _lang));
   }
 
   void _imUp() {
-    if (_confirmed) return;
+    if (_awake) return;
     _loop++;
+    setState(() => _awake = true);
+    _speaker.say(tr(_lang, "Great, you're awake! Have a lovely day.", 'Super, du bist wach! Hab einen schönen Tag.'));
+  }
+
+  /// Stops repeating and starts the surprise songs in Spotify.
+  Future<void> _playSurpriseSongs() async {
+    _loop++;
+    setState(() => _awake = true);
+    await _speaker.stop();
+    final ok = await SongPlayer.playSurpriseSongs();
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(tr(_lang, "Couldn't start the songs. Is Spotify installed?", 'Die Songs konnten nicht starten. Ist Spotify installiert?'))),
+      );
+    }
+  }
+
+  void _showAnswer() {
+    final s = _surprise;
+    if (s == null || _confirmed) return;
     setState(() => _confirmed = true);
-    _speaker.say(tr(_lang, "Great, you're up! Have a lovely day.", 'Super, du bist wach! Hab einen schönen Tag.'));
+    _askAwake(s.riddleAnswerIn(_lang));
+  }
+
+  /// After a quiz answer or riddle solution: says [said] plus "Are you
+  /// awake?" and shows the pop-up at once. Yes: done. No, or no tap within
+  /// 10 seconds after the voice finished: the surprise songs start.
+  Future<void> _askAwake(String said) async {
+    _loop++; // no more repeats
+    final voice = _speaker.say('$said ${tr(_lang, 'Are you awake?', 'Bist du wach?')}');
+    final yes = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _AwakeDialog(lang: _lang, voiceDone: voice),
+    );
+    if (!mounted || _awake) return;
+    if (yes == true) {
+      _imUp();
+    } else {
+      await _playSurpriseSongs();
+    }
   }
 
   void _readAgain() {
@@ -148,6 +192,7 @@ class _SurpriseScreenState extends State<SurpriseScreen> {
       _surprise = _pick();
       _picked = null;
       _confirmed = false;
+      _awake = false;
     });
     final s = _surprise;
     if (widget.fromAlarm) FeedbackService.schedule(widget.store, s?.type);
@@ -237,7 +282,7 @@ class _SurpriseScreenState extends State<SurpriseScreen> {
             Text(s.artist ?? '', style: _sub),
           ],
         ),
-      SurpriseType.adventure => Column(
+      SurpriseType.challenge => Column(
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -251,15 +296,38 @@ class _SurpriseScreenState extends State<SurpriseScreen> {
                 backgroundColor: DawnColors.royalSoft,
                 side: BorderSide.none,
               ),
-            if (!_confirmed)
+            if (!_awake)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  tr(_lang, "The voice keeps reminding you until you tap I'm up.",
-                      'Die Stimme erinnert dich so lange, bis du auf Ich bin wach tippst.'),
-                  style: _sub,
-                ),
+                child: Text(_repeatHint, style: _sub),
               ),
+          ],
+        ),
+      SurpriseType.riddle => Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(s.textIn(_lang), style: _big),
+            const SizedBox(height: 20),
+            if (_confirmed)
+              Text(
+                s.riddleAnswerIn(_lang),
+                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w600, color: DawnColors.royal),
+              )
+            else
+              OutlinedButton(
+                onPressed: _showAnswer,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: DawnColors.royal,
+                  side: const BorderSide(color: DawnColors.royal),
+                  minimumSize: const Size(0, 52),
+                ),
+                child: Text(Surprise.showAnswerLabel(_lang)),
+              ),
+            if (!_awake) ...[
+              const SizedBox(height: 16),
+              Text(_repeatHint, style: _sub),
+            ],
           ],
         ),
       SurpriseType.story => ListView(
@@ -273,6 +341,10 @@ class _SurpriseScreenState extends State<SurpriseScreen> {
         ),
     };
   }
+
+  String get _repeatHint => tr(_lang,
+      'The voice repeats this every 20 seconds until you tap I am awake or Play surprise songs.',
+      'Die Stimme wiederholt das alle 20 Sekunden, bis du auf Ich bin wach oder Überraschungssongs abspielen tippst.');
 
   Widget _quizBody(Surprise s) {
     final options = s.optionsIn(_lang);
@@ -309,12 +381,11 @@ class _SurpriseScreenState extends State<SurpriseScreen> {
             const SizedBox(height: 6),
             Text(fact, style: _sub),
           ],
-        ] else
-          Text(
-            tr(_lang, 'The question repeats until you tap an answer.',
-                'Die Frage wiederholt sich, bis du auf eine Antwort tippst.'),
-            style: _sub,
-          ),
+        ],
+        if (!_awake) ...[
+          const SizedBox(height: 12),
+          Text(_repeatHint, style: _sub),
+        ],
       ],
     );
   }
@@ -332,9 +403,8 @@ class _SurpriseScreenState extends State<SurpriseScreen> {
       minimumSize: const Size.fromHeight(56),
     );
 
-    // Waiting for a tap: only the required answer, nothing to skip with.
-    if (s.type == SurpriseType.quiz && _picked == null) return const [];
-    if (s.type == SurpriseType.adventure && !_confirmed) {
+    // Waiting for a tap: only I am awake or Play surprise songs.
+    if (_waitingForTap) {
       return [
         FilledButton(
           style: FilledButton.styleFrom(
@@ -345,6 +415,13 @@ class _SurpriseScreenState extends State<SurpriseScreen> {
           ),
           onPressed: _imUp,
           child: Text(Surprise.imUpLabel(_lang)),
+        ),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          style: secondary,
+          onPressed: _playSurpriseSongs,
+          icon: const Icon(Icons.music_note_rounded),
+          label: Text(Surprise.playSongsLabel(_lang)),
         ),
       ];
     }
@@ -393,6 +470,82 @@ class _SurpriseScreenState extends State<SurpriseScreen> {
         ],
       ),
     ];
+  }
+}
+
+/// "Are you awake?" with Yes / No. Counts down 10 seconds once the voice
+/// has finished; no answer counts as No.
+class _AwakeDialog extends StatefulWidget {
+  const _AwakeDialog({required this.lang, required this.voiceDone});
+
+  final Lang lang;
+  final Future<void> voiceDone;
+
+  @override
+  State<_AwakeDialog> createState() => _AwakeDialogState();
+}
+
+class _AwakeDialogState extends State<_AwakeDialog> {
+  static const _seconds = 10;
+  Timer? _timer;
+  int? _left; // null while the voice is still speaking
+
+  @override
+  void initState() {
+    super.initState();
+    widget.voiceDone.whenComplete(() {
+      if (!mounted) return;
+      setState(() => _left = _seconds);
+      _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (!mounted) return;
+        final left = (_left ?? _seconds) - 1;
+        if (left <= 0) {
+          _close(false);
+        } else {
+          setState(() => _left = left);
+        }
+      });
+    });
+  }
+
+  void _close(bool awake) {
+    _timer?.cancel();
+    if (mounted) Navigator.of(context).pop(awake);
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = widget.lang;
+    final left = _left;
+    return PopScope(
+      canPop: false,
+      child: AlertDialog(
+        title: Text(tr(l, 'Are you awake?', 'Bist du wach?'), style: const TextStyle(fontSize: 26)),
+        content: Text(
+          left == null
+              ? tr(l, 'If not, the surprise songs will wake you up.', 'Wenn nicht, wecken dich gleich die Überraschungssongs.')
+              : tr(l, 'Surprise songs start in $left s.', 'Überraschungssongs starten in $left s.'),
+          style: const TextStyle(fontSize: 17),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => _close(false),
+            child: Text(tr(l, 'No', 'Nein'), style: const TextStyle(fontSize: 18)),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: DawnColors.coral, foregroundColor: DawnColors.royal),
+            onPressed: () => _close(true),
+            child: Text(tr(l, 'Yes', 'Ja'), style: const TextStyle(fontSize: 18)),
+          ),
+        ],
+      ),
+    );
   }
 }
 

@@ -113,11 +113,29 @@ void main() {
     expect(q.quizFeedback(0, Lang.de), 'Nicht ganz. Die richtige Antwort ist B: Wal.');
   });
 
-  test('all quizzes, adventures and stories have a German version', () {
+  test('all quizzes, challenges, riddles and stories have a German version', () {
     for (final s in starterContent.where((s) => s.type != SurpriseType.song)) {
       expect(s.textDe, isNotNull, reason: s.id);
       if (s.type == SurpriseType.quiz) expect(s.optionsDe.length, 3, reason: s.id);
     }
+  });
+
+  test('every riddle has an answer in both languages', () {
+    final riddles = starterContent.where((s) => s.type == SurpriseType.riddle).toList();
+    expect(riddles, isNotEmpty);
+    for (final r in riddles) {
+      expect(r.answer, isNotNull, reason: r.id);
+      expect(r.answerDe, isNotNull, reason: r.id);
+      expect(r.needsResponse, isTrue);
+    }
+    expect(riddles.first.riddleAnswerIn(Lang.de), startsWith('Die Lösung ist:'));
+  });
+
+  test('everything but songs waits for I am awake', () {
+    for (final s in starterContent) {
+      expect(s.needsResponse, s.type != SurpriseType.song, reason: s.id);
+    }
+    expect(Surprise.imUpLabel(Lang.de), 'Ich bin wach');
   });
 
   test('content ids are unique', () {

@@ -85,10 +85,11 @@ class FeedbackService {
 
   static String _question(SurpriseType type, Lang lang) => switch (type) {
         SurpriseType.song => tr(lang, 'Did you enjoy the song?', 'Hat dir der Song gefallen?'),
-        SurpriseType.adventure =>
+        SurpriseType.challenge =>
           tr(lang, 'Are you up for the challenge?', 'Bist du bereit für die Challenge?'),
         SurpriseType.story => tr(lang, 'Did you enjoy the story?', 'Hat dir die Geschichte gefallen?'),
         SurpriseType.quiz => tr(lang, 'Did you like the quiz?', 'Hat dir das Quiz gefallen?'),
+        SurpriseType.riddle => tr(lang, 'Did you solve the riddle?', 'Hast du das Rätsel gelöst?'),
       };
 
   static void _open(String? payload) {

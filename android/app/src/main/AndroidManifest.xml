@@ -20,6 +20,7 @@
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
+            android:showWhenLocked="true"
             android:taskAffinity=""
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
@@ -32,8 +33,10 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-            <!-- The alarm opens this screen when it rings (full screen or
-                 notification tap), also over the lock screen. -->
+            <!-- The alarm opens this screen when it rings (full screen,
+                 notification tap or "Surprise me"), also over the lock screen.
+                 showWhenLocked above allows that; MainActivity.kt switches it
+                 off again when the app is opened normally. -->
             <intent-filter>
                 <action android:name="com.gdelataillade.alarm.action.RING"/>
                 <category android:name="android.intent.category.DEFAULT"/>

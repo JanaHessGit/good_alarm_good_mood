@@ -9,7 +9,9 @@ import 'alarm_service.dart';
 import 'feedback_service.dart';
 import 'screens/check_in_screen.dart';
 import 'screens/home_screen.dart';
+import 'lock_screen.dart';
 import 'screens/ring_screen.dart';
+import 'screens/surprise_screen.dart';
 import 'settings_store.dart';
 import 'surprise/speaker.dart';
 import 'surprise/surprise.dart';
@@ -119,22 +121,71 @@ class DawnboxApp extends StatefulWidget {
 class _DawnboxAppState extends State<DawnboxApp> {
   StreamSubscription<AlarmSet>? _ringingSub;
   bool _ringScreenOpen = false;
+  bool _surpriseOpen = false;
+
+  /// Set when the app was opened by "Surprise me" or a tap on the alarm
+  /// notification: skip the ringing screen and start the surprise.
+  DateTime? _surpriseRequestedAt;
+  bool get _surpriseRequested =>
+      _surpriseRequestedAt != null &&
+      DateTime.now().difference(_surpriseRequestedAt!) < const Duration(minutes: 2);
+  late final Future<void> _launchChecked;
 
   @override
   void initState() {
     super.initState();
+    _launchChecked = _checkLaunch();
+    // "Surprise me" tapped while the app is already open.
+    LockScreen.onLaunchAction(() async {
+      await _checkLaunch();
+      final wanted = _surpriseRequested;
+      _surpriseRequestedAt = null;
+      if (wanted && await Alarm.isRinging(AlarmService.alarmId)) _startSurprise();
+    });
     // Fires when an alarm starts ringing, also if the app was opened
     // by tapping the alarm notification.
     _ringingSub = Alarm.ringing.listen(_onRinging);
   }
 
-  void _onRinging(AlarmSet ringing) {
+  Future<void> _checkLaunch() async {
+    if (await LockScreen.takeLaunchAction() == 'surprise') _surpriseRequestedAt = DateTime.now();
+  }
+
+  /// Alarm off (tomorrow's re-armed) and straight into the surprise.
+  void _startSurprise() {
+    if (_surpriseOpen) return;
+    final nav = navigatorKey.currentState;
+    if (nav == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _startSurprise());
+      return;
+    }
+    _surpriseOpen = true;
+    nav.popUntil((route) => route.isFirst); // closes the ringing screen if open
+    nav
+        .push(MaterialPageRoute<void>(
+          builder: (_) => SurpriseScreen(store: widget.store, fromAlarm: true),
+        ))
+        .whenComplete(() => _surpriseOpen = false);
+    unawaited(AlarmService.stopAndRearm(widget.store).catchError((_) {}));
+  }
+
+  Future<void> _onRinging(AlarmSet ringing) async {
+    await _launchChecked;
     if (ringing.alarms.isEmpty) {
       // Alarm ended (also from the notification): keep tomorrow's alarm set.
       unawaited(AlarmService.ensureScheduled(widget.store).catchError((_) {}));
       return;
     }
-    if (_ringScreenOpen) return;
+    final ringingAlarm = ringing.alarms.first;
+    if (_surpriseRequested) {
+      _surpriseRequestedAt = null;
+      // The check-in ("Still sleeping?") has no surprise: show it as usual.
+      if (ringingAlarm.id != AlarmService.checkInId) {
+        _startSurprise();
+        return;
+      }
+    }
+    if (_ringScreenOpen || _surpriseOpen) return;
     final nav = navigatorKey.currentState;
     if (nav == null) {
       // App still starting up: try again after the first frame.

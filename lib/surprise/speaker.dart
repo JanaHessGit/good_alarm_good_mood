@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_tts/flutter_tts.dart';
 
 /// Reads surprises aloud with the phone's built-in text-to-speech.
@@ -16,12 +18,23 @@ class Speaker {
   Future<void>? _ready;
   int _run = 0; // bumped on every new say() or stop(), cancels older ones
 
+  /// Completes when the voice has really finished the current sentence.
+  Completer<void>? _sentenceDone;
+
+  void _finished() {
+    final d = _sentenceDone;
+    if (d != null && !d.isCompleted) d.complete();
+  }
+
   Future<void> warmUp() => _init();
 
   Future<void> _init() => _ready ??= _setUp().catchError((_) {});
 
   Future<void> _setUp() async {
     await _tts.awaitSpeakCompletion(true);
+    _tts.setCompletionHandler(_finished);
+    _tts.setCancelHandler(_finished);
+    _tts.setErrorHandler((_) => _finished());
     await _tts.setLanguage(_wantGerman ? 'de-DE' : 'en-US'); // follows the chosen language
     await _tts.setSpeechRate(0.5); // 0.5 is the phone's normal speed
     await _tts.setPitch(1.0);
@@ -118,7 +131,13 @@ class Speaker {
     await _tts.stop();
     for (final sentence in splitSentences(text)) {
       if (run != _run) return false;
-      await _tts.speak(sentence);
+      final done = _sentenceDone = Completer<void>();
+      final result = await _tts.speak(sentence);
+      // Some phones return from speak() before the voice is done. Wait for
+      // the "finished" signal too, so pauses really start after speaking.
+      if (result == 1) {
+        await done.future.timeout(const Duration(seconds: 60), onTimeout: () {});
+      }
       if (run != _run) return false;
       await Future<void>.delayed(const Duration(milliseconds: 250));
     }
@@ -127,6 +146,7 @@ class Speaker {
 
   Future<void> stop() async {
     _run++;
+    _finished();
     await _tts.stop();
   }
 

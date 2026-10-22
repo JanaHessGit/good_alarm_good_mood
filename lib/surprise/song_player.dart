@@ -41,4 +41,31 @@ class SongPlayer {
       return false;
     }
   }
+
+  /// Spotify's own "Wake Up Happy" playlist (checked on open.spotify.com).
+  static const surprisePlaylistId = '37i9dQZF1DX0UrRvztWcAU';
+
+  /// "Play surprise songs": starts the upbeat morning playlist in Spotify.
+  static Future<bool> playSurpriseSongs() async {
+    if (Platform.isAndroid) {
+      try {
+        await AndroidIntent(
+          action: 'android.intent.action.VIEW',
+          data: 'spotify:playlist:$surprisePlaylistId:play',
+          package: _spotify,
+        ).launch();
+        return true;
+      } catch (_) {
+        // Spotify not installed: fall through.
+      }
+    }
+    try {
+      return await launchUrl(
+        Uri.parse('https://open.spotify.com/playlist/$surprisePlaylistId'),
+        mode: LaunchMode.externalApplication,
+      );
+    } catch (_) {
+      return false;
+    }
+  }
 }

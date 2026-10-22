@@ -1,5 +1,8 @@
+include: package:flutter_lints/flutter.yaml
+
 analyzer:
   exclude:
+    # Dawnbox's own copy of the alarm plugin (see packages/alarm/DAWNBOX.md).
+    - packages/**
     - build/**
     - android/**
-include: package:flutter_lints/flutter.yaml

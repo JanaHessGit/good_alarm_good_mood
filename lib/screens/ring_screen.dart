@@ -13,10 +13,10 @@ import '../theme.dart';
 import 'surprise_screen.dart';
 
 /// Shown while the alarm rings, also over the lock screen. Ways out:
-/// - Start surprise -> alarm off, tomorrow re-armed, surprise starts at once
-/// - wait          -> after N seconds the same happens on its own
-/// - Snooze        -> alarm off, rings again in a few minutes
-/// - Stop          -> alarm off, tomorrow re-armed, no surprise today
+/// - Surprise me -> alarm off, tomorrow re-armed, surprise starts at once
+/// - wait        -> after N seconds the same happens on its own
+/// - Stop        -> alarm off, tomorrow re-armed, no surprise today
+/// Same two choices as the alarm notification.
 class RingScreen extends StatefulWidget {
   const RingScreen({super.key, required this.store, required this.alarm});
 
@@ -44,7 +44,7 @@ class _RingScreenState extends State<RingScreen> {
     });
     // Keep this screen on top of the lock screen while it rings.
     LockScreen.showOver(true);
-    // Stopped or snoozed from the notification instead of this screen:
+    // Stopped or surprise started from the notification instead of this screen:
     // close quietly and make sure tomorrow's alarm is set.
     _ringingSub = Alarm.ringing.listen((ringing) async {
       if (ringing.containsId(widget.alarm.id) || _handled) return;
@@ -77,16 +77,6 @@ class _RingScreenState extends State<RingScreen> {
     await AlarmService.stopAndRearm(widget.store);
     await AlarmService.scheduleCheckIn(widget.store);
     await FeedbackService.schedule(widget.store, null);
-    await LockScreen.showOver(false);
-    if (!mounted) return;
-    Navigator.of(context).pop();
-  }
-
-  Future<void> _snooze() async {
-    if (_handled) return;
-    _handled = true;
-    _ticker?.cancel();
-    await AlarmService.snooze(widget.store);
     await LockScreen.showOver(false);
     if (!mounted) return;
     Navigator.of(context).pop();
@@ -156,8 +146,8 @@ class _RingScreenState extends State<RingScreen> {
                 const SizedBox(height: 20),
                 Text(
                   !widget.store.alarmSound.hasSong || left > total - SettingsStore.songAfterSeconds
-                      ? tr(lang, "Tap Start surprise, or wait, and today's surprise starts by itself.",
-                          'Tippe auf Überraschung starten oder warte, dann startet sie von selbst.')
+                      ? tr(lang, "Tap Surprise me, or wait, and today's surprise starts by itself.",
+                          'Tippe auf Überrasch mich oder warte, dann startet sie von selbst.')
                       : tr(lang, 'Your wake-up song is playing.', 'Dein Wach-Song läuft.'),
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: DawnColors.onRoyalMuted, fontSize: 15, height: 1.5),
@@ -173,7 +163,7 @@ class _RingScreenState extends State<RingScreen> {
                       textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                     ),
                     onPressed: _showSurprise,
-                    child: Text(tr(lang, 'Start surprise', 'Überraschung starten')),
+                    child: Text(tr(lang, 'Surprise me', 'Überrasch mich')),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -182,15 +172,9 @@ class _RingScreenState extends State<RingScreen> {
                   height: 56,
                   child: OutlinedButton(
                     style: outlined,
-                    onPressed: _snooze,
-                    child: Text('${tr(lang, 'Snooze', 'Schlummern')} ${widget.store.snoozeMinutes} min'),
+                    onPressed: _stopOnly,
+                    child: Text(tr(lang, 'Stop without surprise', 'Stopp ohne Überraschung')),
                   ),
-                ),
-                const SizedBox(height: 4),
-                TextButton(
-                  onPressed: _stopOnly,
-                  style: TextButton.styleFrom(foregroundColor: DawnColors.onRoyalMuted),
-                  child: Text(tr(lang, 'Stop alarm without surprise', 'Wecker ohne Überraschung stoppen')),
                 ),
               ],
             ),

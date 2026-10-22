@@ -37,15 +37,17 @@ class AlarmService {
           fadeDuration: const Duration(seconds: 10),
           volume: 0.8,
         ),
-        // Snooze straight from the lock-screen notification (Android).
+        // Needed for the notification's second button ("Surprise me").
         androidSnoozeDuration: Duration(minutes: snoozeMinutes),
         notificationSettings: NotificationSettings(
-          // Tapping the notification opens the ringing screen, even on a
-          // locked phone (see setup/MainActivity.kt), with Start surprise.
-          title: tr(lang, 'Good morning! Tap to start your surprise', 'Guten Morgen! Tippe für deine Überraschung'),
-          body: tr(lang, 'Or use Stop or Snooze below.', 'Oder unten Stopp oder Schlummern wählen.'),
+          // Tapping the notification or "Surprise me" opens the app and
+          // starts the surprise, also on a locked phone (packages/alarm).
+          title: tr(lang, 'Good morning!', 'Guten Morgen!'),
+          body: tr(lang, 'Tap here for your surprise.', 'Tippe hier für deine Überraschung.'),
           stopButton: tr(lang, 'Stop', 'Stopp'),
-          androidSnoozeButton: tr(lang, 'Snooze', 'Schlummern'),
+          // Shown as "Surprise me": in Dawnbox's copy of the plugin this
+          // button starts the surprise instead of snoozing.
+          androidSnoozeButton: tr(lang, 'Surprise me', 'Überrasch mich'),
         ),
       );
 

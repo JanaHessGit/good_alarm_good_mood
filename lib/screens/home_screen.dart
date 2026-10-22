@@ -220,7 +220,6 @@ class HomeScreen extends StatelessWidget {
                 _InfoRows(
                   rows: {
                     tr(_l, 'Surprise starts after', 'Überraschung startet nach'): '${store.autoSurpriseSeconds} s',
-                    tr(_l, 'Snooze', 'Schlummern'): '${store.snoozeMinutes} min',
                   },
                 ),
                 const SizedBox(height: 32),
@@ -378,9 +377,46 @@ class _LockScreenCheckState extends State<_LockScreenCheck> with WidgetsBindingO
     if (state == AppLifecycleState.resumed) _check(); // back from Settings
   }
 
+  /// Asked once per app start, until the permission is granted.
+  static bool _askedThisRun = false;
+
   Future<void> _check() async {
     final ok = await LockScreen.canUseFullScreen();
-    if (mounted && ok != _allowed) setState(() => _allowed = ok);
+    if (!mounted) return;
+    if (ok != _allowed) setState(() => _allowed = ok);
+    if (!ok && !_askedThisRun) {
+      _askedThisRun = true;
+      await _ask();
+    }
+  }
+
+  /// Pop-up that explains the permission and opens the right settings page.
+  Future<void> _ask() async {
+    final l = widget.lang;
+    final open = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(tr(l, 'Show the alarm on the lock screen?', 'Wecker auf dem Sperrbildschirm zeigen?')),
+        content: Text(tr(l,
+            'So you can start your surprise or stop the alarm right on the locked phone, '
+                'Dawnbox needs "Full screen notifications".\n\n'
+                'On the next page, switch it on for Dawnbox, then come back.',
+            'Damit du deine Überraschung direkt am gesperrten Handy starten oder den Wecker stoppen kannst, '
+                'braucht Dawnbox „Vollbild-Benachrichtigungen“.\n\n'
+                'Schalte es auf der nächsten Seite für Dawnbox ein und komm dann zurück.')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(tr(l, 'Later', 'Später')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(tr(l, 'Allow', 'Erlauben')),
+          ),
+        ],
+      ),
+    );
+    if (open == true) await LockScreen.openFullScreenSettings();
   }
 
   @override

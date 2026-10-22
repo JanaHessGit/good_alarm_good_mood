@@ -1,5 +1,6 @@
 package com.example.surpise_wake_up
 
+import android.app.KeyguardManager
 import android.app.NotificationManager
 import android.content.Intent
 import android.net.Uri
@@ -16,21 +17,36 @@ class MainActivity : FlutterActivity() {
     // action (full-screen alarm, or a tap on the alarm notification).
     private val actionRing = "com.gdelataillade.alarm.action.RING"
 
+    private var channel: MethodChannel? = null
+
+    /** "surprise" after "Surprise me" or a tap on the alarm notification. */
+    private var pendingAction: String? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Before Flutter starts, so the ringing screen with
-        // "Start surprise / Snooze / Stop" appears over the lock screen at once.
-        showOverLockScreenIfAlarm(intent)
+        // Before Flutter starts, so the alarm appears over the lock screen at
+        // once. Opened normally (app icon): never over the lock screen.
+        handleLaunch(intent, fromNewIntent = false)
         super.onCreate(savedInstanceState)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        showOverLockScreenIfAlarm(intent)
+        handleLaunch(intent, fromNewIntent = true)
     }
 
-    private fun showOverLockScreenIfAlarm(intent: Intent?) {
-        if (intent?.action == actionRing) showOverLockScreen(true)
+    private fun handleLaunch(intent: Intent?, fromNewIntent: Boolean) {
+        val isAlarm = intent?.action == actionRing
+        if (isAlarm) {
+            showOverLockScreen(true)
+        } else if (!fromNewIntent) {
+            showOverLockScreen(false)
+        }
+        if (isAlarm && intent?.getBooleanExtra("dawnboxSurprise", false) == true) {
+            pendingAction = "surprise"
+            // App already running: tell Dart, which then asks for the action.
+            channel?.invokeMethod("launchAction", null)
+        }
     }
 
     private fun showOverLockScreen(on: Boolean) {
@@ -42,9 +58,20 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dawnbox/screen")
-            .setMethodCallHandler { call, result ->
+        val ch = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dawnbox/screen")
+        channel = ch
+        ch.setMethodCallHandler { call, result ->
                 when (call.method) {
+                    // Dart asks once how the app was opened ("surprise" or null).
+                    "takeLaunchAction" -> {
+                        result.success(pendingAction)
+                        pendingAction = null
+                    }
+                    // Is the phone locked right now?
+                    "isLocked" -> {
+                        val km = getSystemService(KeyguardManager::class.java)
+                        result.success(km?.isKeyguardLocked ?: false)
+                    }
                     // Keep Dawnbox on top of the lock screen while the surprise plays.
                     "showOverLockScreen" -> {
                         showOverLockScreen(call.arguments as? Boolean ?: false)

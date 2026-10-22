@@ -20,8 +20,9 @@ class DawnColors {
   static IconData iconFor(SurpriseType type) => switch (type) {
         SurpriseType.quiz => Icons.quiz_outlined,
         SurpriseType.song => Icons.music_note_rounded,
-        SurpriseType.adventure => Icons.explore_outlined,
+        SurpriseType.challenge => Icons.explore_outlined,
         SurpriseType.story => Icons.auto_stories_outlined,
+        SurpriseType.riddle => Icons.lightbulb_outline,
       };
 }
 

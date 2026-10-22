@@ -1,16 +1,20 @@
 # Dawnbox: prototype
 
-An alarm clock with a small surprise every morning: a quote read aloud, a song that starts playing in Spotify by itself, a mini adventure, or a tiny challenge.
+An alarm clock with a small surprise every morning: a quiz, a song that starts playing in Spotify by itself, a mini challenge, a riddle, or a story read aloud.
+
+**Riddles (Rätsel):** the voice reads a riddle; **Show answer** reveals and says the solution.
+
+**Waking up for real:** a quiz, mini challenge, riddle or story is read out after the greeting and repeated until you tap **I am awake** or **Play surprise songs** (starts Spotify's "Wake Up Happy" playlist). The 20-second pause starts only after the voice has finished speaking. Once a quiz is answered or a riddle solved, an **Are you awake?** pop-up appears at once: **Yes** ends it; **No**, or no tap within 10 seconds after the voice finished, starts the playlist. A song surprise announces its first song and starts playing; Spotify continues with similar songs.
 
 ## How it behaves
 
 1. You set a wake-up time on the home screen. The alarm repeats daily.
 2. At that time the alarm rings with a gentle chime (`assets/alarm.wav`, made for this project, free to use).
 3. The ringing screen (also shown over the lock screen) offers:
-   - **Show surprise**: the alarm stops and the surprise starts right away.
-   - **Wait 30 seconds**: the same happens on its own.
-   - **Snooze**: the alarm rings again in 5 minutes. Also available on the notification.
-   - **Stop alarm without surprise** (small link).
+   - **Surprise me**: the alarm stops and the surprise starts right away.
+   - **Wait 60 seconds**: the same happens on its own.
+   - **Stop without surprise**: the alarm stops, no surprise.
+   The notification offers the same two buttons. There is no snooze.
 4. Songs start playing in Spotify by themselves (exact track via its Spotify id). On a locked phone, Android asks you to unlock first.
 5. Every surprise opens with a spoken greeting: "Hello there, it's the morning. I know you want to keep sleeping, but I have a surprise for you to start your day." If you set a name on the home screen, it's added after "Hello there".
 
@@ -45,13 +49,18 @@ dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
 ```
-- **Language:** EN / DE switch at the top of the home screen. It changes the app texts, the voice, everything spoken (greeting, quizzes, adventures, stories) and the notifications.
+- **Language:** EN / DE switch at the top of the home screen. It changes the app texts, the voice, everything spoken (greeting, quizzes, challenges, stories) and the notifications.
 - **Voices:** pick any installed voice of the chosen language.
 - **Alarm sounds:** Chime, Marimba or Soft piano (each followed by the wake-up song after 20 s), or a Classic beep without song. Preview them in the app. Regenerate with `python3 tools/make_alarm_sound.py` (optionally with your own song file).
 
 ## Lock screen setup (Android)
 
-When the alarm rings on a locked phone, Dawnbox opens its ringing screen over the lock screen with **Start surprise**, **Snooze** and **Stop**. If Android only shows the small notification instead, tap the notification itself (not the buttons): that opens the same screen.
+When the alarm rings on a locked phone, the notification has two buttons: **Surprise me** and **Stop**.
+- **Surprise me**, or a tap on the notification itself, opens Dawnbox over the lock screen and starts the surprise right away.
+- **Stop** only stops the alarm. No surprise.
+- If the full-screen alarm is allowed, Dawnbox's ringing screen appears instead, with the same choices: Surprise me or Stop without surprise.
+
+This needs Dawnbox's own copy of the alarm plugin in `packages/alarm` (see `packages/alarm/DAWNBOX.md`).
 
 - Replace `android/app/src/main/AndroidManifest.xml` with `setup/AndroidManifest.xml` (it declares MainActivity as the alarm screen).
 - Replace `android/app/src/main/kotlin/.../MainActivity.kt` with `setup/MainActivity.kt` (keep your own `package` line).
@@ -124,7 +133,7 @@ SwiftAlarmPlugin.registerBackgroundTasks()
 | File | What it does |
 | --- | --- |
 | `lib/main.dart` | Starts the app, opens the ringing screen when an alarm fires |
-| `lib/alarm_service.dart` | Schedules, snoozes and re-arms the daily alarm |
+| `lib/alarm_service.dart` | Schedules and re-arms the daily alarm |
 | `lib/settings_store.dart` | Saves time, on/off, chosen types and surprise history |
 | `lib/screens/home_screen.dart` | Time, on/off switch, surprise types, test buttons |
 | `lib/screens/ring_screen.dart` | Ringing screen with the 30-second countdown |
@@ -137,4 +146,4 @@ SwiftAlarmPlugin.registerBackgroundTasks()
 - Switch the iPhone version to AlarmKit.
 - German content and voice (`Speaker` uses `en-US`; set `de-DE`).
 - Weather- and season-aware picks.
-- An evening check-in: "Did you do today's adventure?"
+- An evening check-in: "Did you do today's challenge?"
