@@ -112,6 +112,9 @@ class SettingsStore extends ChangeNotifier {
     return AlarmSound.values.firstWhere((s) => s.name == saved, orElse: () => AlarmSound.piano); // default: Soft piano + song
   }
 
+  /// Redraws the screens (e.g. after the radio station changed).
+  void refresh() => notifyListeners();
+
   Future<void> setAlarmSound(AlarmSound s) async {
     await _prefs.setString(_kSound, s.name);
     notifyListeners();

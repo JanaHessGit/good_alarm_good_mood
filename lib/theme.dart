@@ -19,7 +19,7 @@ class DawnColors {
 
   static IconData iconFor(SurpriseType type) => switch (type) {
         SurpriseType.quiz => Icons.quiz_outlined,
-        SurpriseType.song => Icons.music_note_rounded,
+        SurpriseType.song => Icons.radio_rounded,
         SurpriseType.challenge => Icons.explore_outlined,
         SurpriseType.riddle => Icons.lightbulb_outline,
       };
@@ -34,6 +34,14 @@ ThemeData buildTheme() => ThemeData(
         surface: Colors.white,
       ),
       scaffoldBackgroundColor: DawnColors.ground,
+      // Any other chip: selected = the dark blue of the alarm card.
+      chipTheme: ChipThemeData(
+        color: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected) ? DawnColors.royal : Colors.white,
+        ),
+        checkmarkColor: Colors.white,
+        side: const BorderSide(color: DawnColors.royal),
+      ),
       // Selected buttons (e.g. EN / DE) use the dark blue of the alarm card.
       segmentedButtonTheme: SegmentedButtonThemeData(
         style: ButtonStyle(
@@ -44,6 +52,8 @@ ThemeData buildTheme() => ThemeData(
             (states) => states.contains(WidgetState.selected) ? Colors.white : DawnColors.royal,
           ),
           side: const WidgetStatePropertyAll(BorderSide(color: DawnColors.royal)),
+          // Also no lighter tint while pressing a selected button.
+          overlayColor: WidgetStatePropertyAll(Colors.white.withValues(alpha: 0.12)),
         ),
       ),
     );

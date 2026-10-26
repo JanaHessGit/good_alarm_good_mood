@@ -84,7 +84,7 @@ class FeedbackService {
   }
 
   static String _question(SurpriseType type, Lang lang) => switch (type) {
-        SurpriseType.song => tr(lang, 'Did you enjoy the song?', 'Hat dir der Song gefallen?'),
+        SurpriseType.song => tr(lang, 'Did you enjoy the radio?', 'Hat dir das Radio gefallen?'),
         SurpriseType.challenge =>
           tr(lang, 'Are you up for the challenge?', 'Bist du bereit für die Challenge?'),
         SurpriseType.quiz => tr(lang, 'Did you like the quiz?', 'Hat dir das Quiz gefallen?'),
@@ -160,7 +160,14 @@ class _FeedbackSheetState extends State<FeedbackSheet> {
             label: Text(label),
             selected: selected == value,
             onSelected: (_) => onPick(value),
-            selectedColor: DawnColors.coral,
+            // Selected: the same dark blue as the alarm time card.
+            color: WidgetStatePropertyAll(selected == value ? DawnColors.royal : Colors.white),
+            labelStyle: TextStyle(
+              color: selected == value ? Colors.white : DawnColors.royal,
+              fontWeight: FontWeight.w500,
+            ),
+            side: const BorderSide(color: DawnColors.royal),
+            showCheckmark: false,
           ),
       ],
     );

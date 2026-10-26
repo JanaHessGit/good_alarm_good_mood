@@ -12,7 +12,7 @@ extension SurpriseTypeLabel on SurpriseType {
 
   String labelIn(Lang lang) => switch (this) {
         SurpriseType.quiz => 'Quiz',
-        SurpriseType.song => 'Song',
+        SurpriseType.song => 'Radio',
         SurpriseType.challenge => tr(lang, 'Mini challenge', 'Mini-Challenge'),
         SurpriseType.riddle => tr(lang, 'Riddle', 'Rätsel'),
       };
@@ -30,6 +30,7 @@ class Surprise {
     this.textDe,
     this.artist,
     this.spotifyId,
+    this.streamUrls = const [],
     this.options = const [],
     this.optionsDe = const [],
     this.answerIndex = 0,
@@ -57,6 +58,9 @@ class Surprise {
 
   /// Spotify track id (songs only), the part after open.spotify.com/track/.
   final String? spotifyId;
+
+  /// Radio station: stream addresses, tried in order until one plays.
+  final List<String> streamUrls;
 
   /// Quiz: exactly three answer options, and which one is right (0, 1 or 2).
   final List<String> options;
@@ -105,8 +109,8 @@ class Surprise {
   /// ignore it.
   bool get needsResponse => type != SurpriseType.song;
 
-  /// Label of the second way out: start the surprise songs in Spotify.
-  static String playSongsLabel(Lang l) => tr(l, 'Play some songs', 'Spiel ein paar Songs');
+  /// Label of the second way out: start the radio.
+  static String playSongsLabel(Lang l) => tr(l, 'Play radio', 'Radio abspielen');
 
   /// Label of the riddle button.
   static String showAnswerLabel(Lang l) => tr(l, 'Show answer', 'Lösung zeigen');
@@ -129,6 +133,9 @@ class Surprise {
         final list = [for (var i = 0; i < opts.length; i++) '${letters[i]}: ${opts[i]}.'].join(' ');
         return '${textIn(l)} $list ${tr(l, 'Tap your answer.', 'Tippe auf deine Antwort.')}';
       case SurpriseType.song:
+        // A radio station: name, then what it plays (e.g. "Pop from Cologne").
+        final about = moodIn(l);
+        if (streamUrls.isNotEmpty) return about == null ? '$text.' : '$text. $about.';
         return '$text, ${tr(l, 'by', 'von')} $artist.';
       case SurpriseType.challenge:
         return '${textIn(l)} ${tr(l, "Tap I am awake when you're out of bed.", 'Tippe auf Ich bin wach, sobald du aufgestanden bist.')}';
@@ -155,7 +162,7 @@ class Surprise {
 
   String announcementIn(Lang l) => switch (type) {
         SurpriseType.quiz => tr(l, 'a little quiz', 'ein kleines Quiz'),
-        SurpriseType.song => tr(l, 'a song', 'ein Song'),
+        SurpriseType.song => tr(l, 'a radio station', 'ein Radiosender'),
         SurpriseType.challenge => tr(l, 'a mini challenge', 'eine Mini-Challenge'),
         SurpriseType.riddle => tr(l, 'a riddle', 'ein Rätsel'),
       };

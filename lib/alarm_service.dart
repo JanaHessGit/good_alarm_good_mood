@@ -117,9 +117,9 @@ class AlarmService {
           title: de ? 'Schläfst du noch?' : 'Still sleeping?',
           body: de ? 'Wenn nicht, tippe hier.' : 'If not, tap here.',
           stopButton: de ? 'Ich bin wach' : 'I am awake',
-          // Second button: opens Dawnbox, which starts songs in Spotify
+          // Second button: opens the app, which starts the radio
           // (packages/alarm, DawnboxActionReceiver).
-          androidSnoozeButton: de ? 'Spiel ein paar Songs' : 'Play some songs',
+          androidSnoozeButton: de ? 'Radio abspielen' : 'Play radio',
         ),
         // Needed so the plugin accepts the second button.
         androidSnoozeDuration: const Duration(minutes: 5),

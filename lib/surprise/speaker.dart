@@ -60,8 +60,9 @@ class Speaker {
     await _pickBestVoice();
   }
 
-  /// All offline English and German voices on this phone, best quality first.
-  /// Network voices are left out so the alarm still talks without internet.
+  /// All English and German voices on this phone: offline voices first
+  /// (they work without internet), then online voices as a fallback, e.g.
+  /// when English voice data isn't downloaded on the phone.
   Future<List<VoiceOption>> availableVoices() async {
     try {
       final raw = await _tts.getVoices;
@@ -76,11 +77,12 @@ class Speaker {
         final l = locale.toLowerCase();
         if (!l.startsWith('en') && !l.startsWith('de')) continue;
         if ((voice['features'] ?? '').contains('notInstalled')) continue;
-        if (voice['network_required'] == '1') continue;
-        voices.add(VoiceOption(name, locale, _qualityRank(voice['quality'])));
+        final online = voice['network_required'] == '1' || name.endsWith('-network');
+        voices.add(VoiceOption(name, locale, _qualityRank(voice['quality']), online));
       }
       voices.sort((a, b) {
         if (a.isGerman != b.isGerman) return a.isGerman ? 1 : -1; // English first
+        if (a.online != b.online) return a.online ? 1 : -1; // offline first
         final q = b.quality.compareTo(a.quality);
         return q != 0 ? q : a.name.compareTo(b.name);
       });
@@ -104,16 +106,21 @@ class Speaker {
     final voices = await availableVoices();
     if (voices.isEmpty) return; // keep the phone's default voice
     final want = preferred;
+    // Only voices of the chosen language (never a German voice for English).
     final sameLanguage = voices.where((v) => v.isGerman == _wantGerman).toList();
+    if (sameLanguage.isEmpty) {
+      // No voice of this language listed: let the phone pick its own.
+      current = null;
+      try {
+        await _tts.setLanguage(_wantGerman ? 'de-DE' : 'en-US');
+      } catch (_) {}
+      return;
+    }
     final defaultCode = _wantGerman ? defaultGermanVoice : defaultEnglishVoice;
-    final defaults = sameLanguage.where((v) => v.code == defaultCode);
-    final chosen = voices.firstWhere(
+    final defaults = sameLanguage.where((v) => v.code == defaultCode).toList();
+    final chosen = sameLanguage.firstWhere(
       (v) => want != null && v.name == want.name && v.locale == want.locale,
-      orElse: () => defaults.isNotEmpty
-          ? defaults.first
-          : sameLanguage.isNotEmpty
-              ? sameLanguage.first
-              : voices.first,
+      orElse: () => defaults.isNotEmpty ? defaults.first : sameLanguage.first,
     );
     await _apply(chosen);
   }
@@ -189,11 +196,14 @@ class Speaker {
 /// One installed voice. [label] turns names like "en-gb-x-gba-local" into
 /// something readable.
 class VoiceOption {
-  const VoiceOption(this.name, this.locale, [this.quality = 0]);
+  const VoiceOption(this.name, this.locale, [this.quality = 0, this.online = false]);
 
   final String name;
   final String locale;
   final int quality;
+
+  /// Needs internet (Google's online voices). Used only as a fallback.
+  final bool online;
 
   bool get isGerman => locale.toLowerCase().startsWith('de');
 
@@ -220,5 +230,6 @@ class VoiceOption {
     return parts.length >= 4 ? parts[3] : name;
   }
 
-  String get label => isGerman ? '$region · $code' : '$region English · $code';
+  String get label =>
+      (isGerman ? '$region · $code' : '$region English · $code') + (online ? ' · online' : '');
 }

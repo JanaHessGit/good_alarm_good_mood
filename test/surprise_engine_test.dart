@@ -79,7 +79,7 @@ void main() {
       song.morningMessage(''),
       "Hello there, it's the morning. "
       'I know you want to keep sleeping, but I have a surprise for you to start your day. '
-      'Your surprise is a song. Lovely Day, by Bill Withers.',
+      'Your surprise is a radio station. Lovely Day, by Bill Withers.',
     );
     expect(song.morningMessage(' Jana '), startsWith("Hello there, Jana, it's the morning."));
   });
@@ -127,6 +127,16 @@ void main() {
       expect(s.needsResponse, s.type != SurpriseType.song, reason: s.id);
     }
     expect(Surprise.imUpLabel(Lang.de), 'Ich bin wach');
+  });
+
+  test('every radio station has a stream address and a German description', () {
+    final radios = starterContent.where((s) => s.type == SurpriseType.song).toList();
+    expect(radios, isNotEmpty);
+    for (final r in radios) {
+      expect(r.streamUrls, isNotEmpty, reason: r.id);
+      expect(r.moodDe, isNotNull, reason: r.id);
+    }
+    expect(radios.first.spokenIn(Lang.de), contains('.'));
   });
 
   test('content ids are unique', () {

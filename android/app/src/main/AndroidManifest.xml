@@ -1,6 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!-- Needed by the alarm plugin -->
+    <!-- Needed for the radio streams (release builds have no internet without it) -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
@@ -17,7 +19,8 @@
     <application
         android:label="Rise &amp; Surprise"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -44,17 +47,6 @@
                 <category android:name="android.intent.category.DEFAULT"/>
             </intent-filter>
         </activity>
-        <!-- Spotify connection (spotify_sdk): returns from Spotify's "agree" screen -->
-        <activity
-            android:name="com.spotify.sdk.android.auth.browser.RedirectUriReceiverActivity"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW"/>
-                <category android:name="android.intent.category.DEFAULT"/>
-                <category android:name="android.intent.category.BROWSABLE"/>
-                <data android:scheme="spotify-sdk" android:host="auth"/>
-            </intent-filter>
-        </activity>
         <meta-data
             android:name="flutterEmbedding"
             android:value="2"/>
@@ -76,9 +68,7 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
-        <!-- Lets the app start songs in Spotify -->
-        <package android:name="com.spotify.music"/>
-        <!-- Lets the app open Spotify web links (if the app is missing) -->
+        <!-- Lets the app open web links -->
         <intent>
             <action android:name="android.intent.action.VIEW"/>
             <data android:scheme="https"/>

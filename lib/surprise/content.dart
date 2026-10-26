@@ -77,16 +77,56 @@ const List<Surprise> starterContent = [
       optionsDe: ['Gold', 'Diamant', 'Granit'],
       factDe: 'Diamant ist reiner Kohlenstoff, genau wie das Graphit in einem Bleistift.'),
 
-  // Songs (Spotify ids checked on open.spotify.com)
-  Surprise(id: 's01', type: SurpriseType.song, text: 'Here Comes the Sun', artist: 'The Beatles', spotifyId: '6dGnYIeXmHdcikdzNNDMm2'),
-  Surprise(id: 's02', type: SurpriseType.song, text: 'Lovely Day', artist: 'Bill Withers', spotifyId: '0bRXwKfigvpKZUurwqAlEh'),
-  Surprise(id: 's03', type: SurpriseType.song, text: 'Mr. Blue Sky', artist: 'Electric Light Orchestra', spotifyId: '2RlgNHKcydI9sayD2Df2xp'),
-  Surprise(id: 's04', type: SurpriseType.song, text: 'Walking on Sunshine', artist: 'Katrina and the Waves', spotifyId: '05wIrZSwuaVWhcv5FfqeH0'),
-  Surprise(id: 's05', type: SurpriseType.song, text: 'Three Little Birds', artist: 'Bob Marley & The Wailers', spotifyId: '6A9mKXlFRPMPem6ygQSt7z'),
-  Surprise(id: 's06', type: SurpriseType.song, text: "Don't Stop Me Now", artist: 'Queen', spotifyId: '5T8EDUDqKcs6OSOwEsfqG7'),
-  Surprise(id: 's07', type: SurpriseType.song, text: 'Beautiful Day', artist: 'U2', spotifyId: '1VuBmEauSZywQVtqbxNqka'),
-  Surprise(id: 's08', type: SurpriseType.song, text: 'Wake Me Up', artist: 'Avicii', spotifyId: '0nrRP2bk19rLc0orkWPQk2'),
-  Surprise(id: 's10', type: SurpriseType.song, text: 'Morning Has Broken', artist: 'Cat Stevens', spotifyId: '7dy51xaRi7glILvfRVNuFl', dayFit: DayFit.weekend),
+  // Radio stations (free live streams, played inside the app, also on a
+  // locked phone). Several addresses each: if one fails, the next is tried.
+  Surprise(id: 'f01', type: SurpriseType.song, text: '1LIVE',
+      mood: 'New hits and pop from Cologne', moodDe: 'Neue Hits und Pop aus Köln',
+      streamUrls: [
+        'https://wdr-1live-live.icecastssl.wdr.de/wdr/1live/live/mp3/128/stream.mp3',
+        'http://wdr-1live-live.icecast.wdr.de/wdr/1live/live/mp3/128/stream.mp3',
+      ]),
+  Surprise(id: 'f02', type: SurpriseType.song, text: 'SWR3',
+      mood: 'Pop, hits and good mood from the south-west', moodDe: 'Pop, Hits und gute Laune aus dem Südwesten',
+      streamUrls: [
+        'https://liveradio.swr.de/sw282p3/swr3/play.mp3',
+        'http://liveradio.swr.de/sw282p3/swr3/play.mp3',
+      ]),
+  Surprise(id: 'f03', type: SurpriseType.song, text: 'N-JOY',
+      mood: 'Pop and new music from the north', moodDe: 'Pop und neue Musik aus dem Norden',
+      streamUrls: [
+        'https://icecast.ndr.de/ndr/njoy/live/mp3/128/stream.mp3',
+        'http://icecast.ndr.de/ndr/njoy/live/mp3/128/stream.mp3',
+      ]),
+  Surprise(id: 'f04', type: SurpriseType.song, text: 'Bremen Vier',
+      mood: 'Hits and fun from Bremen', moodDe: 'Hits und Spaß aus Bremen',
+      streamUrls: [
+        'https://icecast.radiobremen.de/rb/bremenvier/live/mp3/128/stream.mp3',
+        'http://icecast.radiobremen.de/rb/bremenvier/live/mp3/128/stream.mp3',
+      ]),
+  Surprise(id: 'f05', type: SurpriseType.song, text: 'MDR Jump',
+      mood: 'The best mix from central Germany', moodDe: 'Der beste Mix aus Mitteldeutschland',
+      streamUrls: [
+        'https://mdr-284320-0.sslcast.mdr.de/mdr/284320/0/mp3/high/stream.mp3',
+        'http://mdr-284320-0.cast.mdr.de/mdr/284320/0/mp3/high/stream.mp3',
+      ]),
+  Surprise(id: 'f06', type: SurpriseType.song, text: 'Antenne Bayern',
+      mood: 'Hits and good mood from Bavaria', moodDe: 'Hits und gute Laune aus Bayern',
+      streamUrls: [
+        'https://stream.antenne.de/antenne',
+        'http://mp3channels.webradio.antenne.de/antenne',
+      ]),
+  Surprise(id: 'f07', type: SurpriseType.song, text: 'hr3',
+      mood: 'Pop and hits from Hesse', moodDe: 'Pop und Hits aus Hessen',
+      streamUrls: [
+        'https://dispatcher.rndfnk.com/hr/hr3/rheinmain/high',
+      ]),
+  Surprise(id: 'f08', type: SurpriseType.song, text: 'Radio Paradise',
+      mood: 'A relaxed mix of rock, pop and world music, without ads',
+      moodDe: 'Ein entspannter Mix aus Rock, Pop und Weltmusik, ohne Werbung',
+      streamUrls: [
+        'https://stream.radioparadise.com/mp3-128',
+        'http://stream.radioparadise.com/mp3-320',
+      ]),
 
   // Mini challenges. Each one gets you
   // out of bed right away, or plans something small for the day.

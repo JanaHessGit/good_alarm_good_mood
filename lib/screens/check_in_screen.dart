@@ -36,6 +36,7 @@ class _CheckInScreenState extends State<CheckInScreen> {
     super.initState();
     LockScreen.showOver(true);
     LockScreen.keepScreenOn(true); // stays on until I am awake
+    SongPlayer.stop(); // the radio pauses while the check-in asks
     Speaker.shared.say(tr(_lang, 'Still sleeping? If not, tap here.', 'Schläfst du noch? Wenn nicht, tippe hier.'));
     // Confirmed from the notification instead: just close.
     _ringingSub = Alarm.ringing.listen((ringing) {
@@ -51,7 +52,7 @@ class _CheckInScreenState extends State<CheckInScreen> {
     _close();
   }
 
-  /// Stops the check-in and starts feel-good songs in Spotify.
+  /// Stops the check-in and starts the radio.
   Future<void> _playSongs() async {
     if (_done) return;
     await Speaker.shared.stop();
@@ -125,7 +126,7 @@ class _CheckInScreenState extends State<CheckInScreen> {
                     ),
                     onPressed: _playSongs,
                     icon: const Icon(Icons.music_note_rounded),
-                    label: Text(tr(_lang, 'Play some songs', 'Spiel ein paar Songs')),
+                    label: Text(Surprise.playSongsLabel(_lang)),
                   ),
                 ),
               ],

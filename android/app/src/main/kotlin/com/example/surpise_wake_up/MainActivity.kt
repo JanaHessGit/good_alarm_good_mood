@@ -26,7 +26,7 @@ class MainActivity : FlutterActivity() {
 
     /**
      * Keeps the CPU awake from the alarm until "I am awake" (at most 30 min),
-     * so timers, the voice, the waiting music and the Spotify call keep
+     * so timers, the voice, the waiting music and the radio keep
      * running even if the screen is switched off with the power button.
      */
     private var cpuLock: PowerManager.WakeLock? = null

@@ -8,6 +8,7 @@ import '../feedback_service.dart';
 import '../lock_screen.dart';
 import '../settings_store.dart';
 import '../surprise/content.dart';
+import '../surprise/radio_player.dart';
 import '../surprise/song_player.dart';
 import '../surprise/speaker.dart';
 import '../surprise/surprise.dart';
@@ -104,9 +105,6 @@ class _SurpriseScreenState extends State<SurpriseScreen> {
       });
     }
     _surprise = _pick();
-    // Connect to Spotify right away (while the voice speaks), so songs can
-    // start without delay later. Does nothing if Spotify isn't set up.
-    unawaited(SongPlayer.connect(onlyIfConnectedBefore: true));
     // A song needs no tap: after 10 minutes of songs, the check-in.
     if (_surprise?.type == SurpriseType.song) _scheduleSongsCheckIn();
     if (widget.fromAlarm) FeedbackService.schedule(widget.store, _surprise?.type);
@@ -115,7 +113,7 @@ class _SurpriseScreenState extends State<SurpriseScreen> {
   }
 
   /// Speaks [first]. Then:
-  /// - song: starts the song (Spotify keeps playing similar songs after it),
+  /// - radio: starts the radio station,
   /// - everything else: 30 s of waiting music after the voice has finished,
   ///   then says it again, until the user taps I am awake or Play some songs. Answering a
   ///   quiz or solving a riddle opens the "Are you awake?" pop-up instead.
@@ -180,7 +178,7 @@ class _SurpriseScreenState extends State<SurpriseScreen> {
     final ok = await SongPlayer.play(s);
     if (!ok && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr(_lang, "The song didn't start. Check that Spotify is installed and connected (home screen).", 'Der Song ist nicht gestartet. Prüfe, ob Spotify installiert und verbunden ist (Startbildschirm).'))),
+        SnackBar(content: Text(tr(_lang, "The radio didn't start. Check your internet connection.", 'Das Radio ist nicht gestartet. Prüfe deine Internetverbindung.'))),
       );
     }
   }
@@ -218,7 +216,7 @@ class _SurpriseScreenState extends State<SurpriseScreen> {
     _speaker.say(tr(_lang, "Great, you're awake! Have a lovely day.", 'Super, du bist wach! Hab einen schönen Tag.'));
   }
 
-  /// Stops repeating and starts the surprise songs in Spotify. With
+  /// Stops repeating and starts the radio. With
   /// [checkIn], the songs are paused after 10 minutes and the check-in rings.
   Future<void> _playSurpriseSongs({bool checkIn = true}) async {
     _loop++;
@@ -233,7 +231,7 @@ class _SurpriseScreenState extends State<SurpriseScreen> {
     final ok = await SongPlayer.playSurpriseSongs();
     if (!ok && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr(_lang, "The songs didn't start. Check that Spotify is installed and connected (home screen).", 'Die Songs sind nicht gestartet. Prüfe, ob Spotify installiert und verbunden ist (Startbildschirm).'))),
+        SnackBar(content: Text(tr(_lang, "The radio didn't start. Check your internet connection.", 'Das Radio ist nicht gestartet. Prüfe deine Internetverbindung.'))),
       );
     }
   }
@@ -343,7 +341,7 @@ class _SurpriseScreenState extends State<SurpriseScreen> {
           children: [
             Text(s.text, style: _big),
             const SizedBox(height: 8),
-            Text(s.artist ?? '', style: _sub),
+            Text(s.moodIn(_lang) ?? s.artist ?? '', style: _sub),
           ],
         ),
       SurpriseType.challenge => Column(
@@ -398,8 +396,8 @@ class _SurpriseScreenState extends State<SurpriseScreen> {
   }
 
   String get _repeatHint => tr(_lang,
-      'The voice repeats this every 30 seconds until you tap I am awake or Play some songs.',
-      'Die Stimme wiederholt das alle 30 Sekunden, bis du auf Ich bin wach oder Spiel ein paar Songs tippst.');
+      'The voice repeats this every 30 seconds until you tap I am awake or Play radio.',
+      'Die Stimme wiederholt das alle 30 Sekunden, bis du auf Ich bin wach oder Radio abspielen tippst.');
 
   Widget _quizBody(Surprise s) {
     final options = s.optionsIn(_lang);
@@ -481,9 +479,24 @@ class _SurpriseScreenState extends State<SurpriseScreen> {
       ];
     }
 
-    // Song: Spotify plays, no buttons needed.
-    if (s.type == SurpriseType.song) return const [];
+    final stopRadio = ValueListenableBuilder<Surprise?>(
+      valueListenable: RadioPlayer.shared.playing,
+      builder: (context, station, _) => station == null
+          ? const SizedBox.shrink()
+          : Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: OutlinedButton.icon(
+                style: secondary,
+                onPressed: RadioPlayer.shared.stop,
+                icon: const Icon(Icons.stop_rounded),
+                label: Text(tr(_lang, 'Stop radio (${station.text})', 'Radio stoppen (${station.text})')),
+              ),
+            ),
+    );
+    // Radio surprise: only the stop button.
+    if (s.type == SurpriseType.song) return [stopRadio];
     return [
+      stopRadio,
       FilledButton(
         style: primary,
         onPressed: () => Navigator.of(context).pop(),
@@ -549,8 +562,8 @@ class _AwakeDialogState extends State<_AwakeDialog> {
         title: Text(tr(l, 'Are you awake?', 'Bist du wach?'), style: const TextStyle(fontSize: 26)),
         content: Text(
           left == null
-              ? tr(l, 'If not, some songs will wake you up.', 'Wenn nicht, wecken dich gleich ein paar Songs.')
-              : tr(l, 'Songs start in $left s.', 'Songs starten in $left s.'),
+              ? tr(l, 'If not, the radio will wake you up.', 'Wenn nicht, weckt dich gleich das Radio.')
+              : tr(l, 'The radio starts in $left s.', 'Das Radio startet in $left s.'),
           style: const TextStyle(fontSize: 17),
         ),
         actions: [

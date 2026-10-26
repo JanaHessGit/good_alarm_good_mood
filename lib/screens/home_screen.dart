@@ -5,9 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../alarm_service.dart';
+import '../credits.dart';
 import '../lock_screen.dart';
 import '../settings_store.dart';
-import '../spotify_config.dart';
+import '../surprise/radio_player.dart';
 import '../surprise/song_player.dart';
 import '../surprise/speaker.dart';
 import '../surprise/surprise.dart';
@@ -108,25 +109,38 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  /// Connects to Spotify once, so songs can play on a locked phone.
-  Future<void> _connectSpotify(BuildContext context) async {
-    final messenger = ScaffoldMessenger.of(context);
-    if (!SpotifyConfig.isSet) {
-      messenger.showSnackBar(SnackBar(
-        content: Text(tr(_l,
-            'Add your Spotify Client ID in lib/spotify_config.dart first (see README).',
-            'Trage zuerst deine Spotify Client ID in lib/spotify_config.dart ein (siehe README).')),
-      ));
-      return;
-    }
-    final ok = await SongPlayer.connect();
-    messenger.showSnackBar(SnackBar(
-      content: Text(ok
-          ? tr(_l, 'Spotify connected. Songs now also play on a locked phone.',
-              'Spotify verbunden. Songs spielen jetzt auch bei gesperrtem Handy.')
-          : tr(_l, "Couldn't connect. Is Spotify installed and are you logged in?",
-              'Verbindung fehlgeschlagen. Ist Spotify installiert und bist du eingeloggt?')),
-    ));
+  /// Picks the station for "Play radio" (or "surprise me" = random).
+  Future<void> _pickRadio(BuildContext context) async {
+    final current = await SongPlayer.favouriteId();
+    if (!context.mounted) return;
+    final picked = await showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: Text(tr(_l, 'Radio station', 'Radiosender')),
+        children: [
+          for (final (id, name) in [
+            ('', tr(_l, 'Surprise me (random)', 'Überrasch mich (zufällig)')),
+            for (final st in SongPlayer.stations) (st.id, st.text),
+          ])
+            SimpleDialogOption(
+              onPressed: () => Navigator.of(context).pop(id),
+              child: Row(
+                children: [
+                  Icon(
+                    (current ?? '') == id ? Icons.radio_button_checked : Icons.radio_button_off,
+                    color: DawnColors.royal,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text(name, style: const TextStyle(fontSize: 16))),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+    if (picked == null) return;
+    await SongPlayer.setFavourite(picked.isEmpty ? null : picked);
+    store.refresh(); // redraw the row
   }
 
   Widget _settingRow(String title, String value, VoidCallback onTap) {
@@ -221,6 +235,8 @@ class HomeScreen extends StatelessWidget {
                           avatar: Icon(DawnColors.iconFor(type), size: 18, color: on ? Colors.white : DawnColors.royal),
                           selected: on,
                           onSelected: (_) => store.toggleType(type),
+                          // `color` wins over Material's own selected tint.
+                          color: WidgetStatePropertyAll(on ? DawnColors.royal : Colors.white),
                           selectedColor: DawnColors.royal,
                           backgroundColor: Colors.white,
                           side: const BorderSide(color: DawnColors.royal),
@@ -253,12 +269,44 @@ class HomeScreen extends StatelessWidget {
                     builder: (_) => SoundPicker(store: store),
                   ),
                 ),
+                FutureBuilder<String?>(
+                  future: SongPlayer.favouriteId(),
+                  builder: (context, snap) {
+                    final id = snap.data;
+                    String? name;
+                    for (final st in SongPlayer.stations) {
+                      if (st.id == id) name = st.text;
+                    }
+                    return _settingRow(
+                      tr(_l, 'Radio station', 'Radiosender'),
+                      name ?? tr(_l, 'Surprise me', 'Überrasch mich'),
+                      () => _pickRadio(context),
+                    );
+                  },
+                ),
+                // While the radio plays: a button to stop it.
+                ValueListenableBuilder<Surprise?>(
+                  valueListenable: RadioPlayer.shared.playing,
+                  builder: (context, station, _) => station == null
+                      ? const SizedBox.shrink()
+                      : Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: OutlinedButton.icon(
+                            onPressed: RadioPlayer.shared.stop,
+                            icon: const Icon(Icons.stop_rounded),
+                            label: Text(tr(_l, 'Stop radio (${station.text})', 'Radio stoppen (${station.text})')),
+                          ),
+                        ),
+                ),
                 _settingRow(
-                  'Spotify',
-                  SpotifyConfig.isSet
-                      ? tr(_l, 'Connect (once)', 'Verbinden (einmalig)')
-                      : tr(_l, 'Not set up, see README', 'Nicht eingerichtet, siehe README'),
-                  () => _connectSpotify(context),
+                  tr(_l, 'About & licences', 'Über die App & Lizenzen'),
+                  '›',
+                  () => showLicensePage(
+                    context: context,
+                    applicationName: 'Rise & Surprise',
+                    applicationVersion: appVersion,
+                    applicationLegalese: '© 2026 Jana',
+                  ),
                 ),
                 const SizedBox(height: 32),
                 SizedBox(

@@ -6,6 +6,7 @@ import 'package:alarm/utils/alarm_set.dart';
 import 'package:flutter/material.dart';
 
 import 'alarm_service.dart';
+import 'credits.dart';
 import 'feedback_service.dart';
 import 'screens/check_in_screen.dart';
 import 'screens/home_screen.dart';
@@ -25,6 +26,7 @@ final startupErrors = <String>[];
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  registerCredits(); // own notes on the About & licences page
 
   // Any error later on is also shown instead of disappearing silently.
   FlutterError.onError = (details) {
@@ -168,7 +170,7 @@ class _DawnboxAppState extends State<DawnboxApp> {
     }
   }
 
-  /// Check-in "Play some songs": stop the check-in and start Spotify.
+  /// Check-in "Play radio": stop the check-in and start the radio.
   Future<void> _playSongsFromCheckIn() async {
     await Alarm.stop(AlarmService.checkInId); // the check-in screen closes itself
     await SongPlayer.playSurpriseSongs();
@@ -202,6 +204,8 @@ class _DawnboxAppState extends State<DawnboxApp> {
       return;
     }
     final ringingAlarm = ringing.alarms.first;
+    // Any alarm (the morning alarm or the check-in) stops the radio first.
+    unawaited(SongPlayer.stop());
     final action = _takeRequest();
     if (action != null) {
       if (ringingAlarm.id != AlarmService.checkInId) {
