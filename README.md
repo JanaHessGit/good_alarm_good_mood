@@ -2,6 +2,8 @@
 
 *(Code name and project folder: `dawnbox`.)*
 
+- All code by Claude, no code review yet -
+
 An alarm clock that gets you up with a small surprise every morning: a quiz, a radio station, a mini challenge or a riddle, read aloud in English or German.
 
 Android first. An iPhone build works with limits (see the end).
